@@ -1,0 +1,39 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      TABLE_NAME: JournalTable
+      AWS_REGION: eu-west-1
+      AWS_ACCESS_KEY_ID: testKey
+      AWS_SECRET_ACCESS_KEY: testSecretKey
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+    depends_on:
+      - dynamodb
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    command: sh -c "npx ts-node src/dev/createTable.ts && ts-node-dev --respawn --transpile-only src/index.ts"
+
+  dynamodb:
+    image: amazon/dynamodb-local
+    container_name: journal_dynamodb
+    ports:
+      - '8000:8000'
+    volumes:
+      - dynamodb_data:/data
+    entrypoint:
+      [
+        'sh',
+        '-c',
+        'mkdir -p /data && chmod -R 777 /data && java -jar DynamoDBLocal.jar -dbPath /data -sharedDb',
+      ]
+    command: 'mkdir -p /data && chmod -R 777 /data && java -jar DynamoDBLocal.jar -dbPath /data -sharedDb'
+    user: 'root'
+
+volumes:
+  dynamodb_data:
