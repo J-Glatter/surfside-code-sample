@@ -22,6 +22,11 @@ generate = [
     "accelerate>=0.27",
     "peft>=0.9",
 ]
+# CLIP auto-curation (GPU box recommended, CPU works)
+curate = [
+    "torch>=2.1",
+    "transformers>=4.38",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.4",

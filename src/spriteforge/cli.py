@@ -11,6 +11,7 @@ Flag names preserved from the original Phase-0 scripts (reference/*.py).
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from .pixelize import DEFAULT_COLORS, DEFAULT_SIZE, pixelize, upscale_preview
 
@@ -84,6 +85,44 @@ def _cmd_palette_extract(a: argparse.Namespace) -> None:
     print(f"wrote {a.output} ({len(pal)} colours): {' '.join(pal.hex_colors)}")
 
 
+def _cmd_dataset_prep(a: argparse.Namespace) -> None:
+    from .dataset import prep_dataset
+
+    train_dir = prep_dataset(a.images, a.output, trigger=a.trigger,
+                             repeats=a.repeats, class_word=a.class_word,
+                             name=a.name)
+    print(f"kohya dataset ready: {train_dir}")
+    print(f"see {a.output}/NOTES.md for the training command")
+
+
+def _cmd_refine(a: argparse.Namespace) -> None:
+    # Lazy: needs the [generate] extra — GPU boxes only.
+    from PIL import Image
+
+    from .refine import build_img2img_pipe, refine
+
+    fp16 = True if a.fp16 else False if a.fp32 else None
+    pipe = build_img2img_pipe(fp16=fp16, character_lora=a.character_lora)
+    hero = Image.open(a.hero)
+    print("refining...")
+    written = refine(pipe, hero, a.prompt, a.output,
+                     per_variation=a.per_variation, strength=a.strength,
+                     seed=a.seed)
+    print(f"wrote {len(written)} candidates to {a.output}")
+
+
+def _cmd_curate(a: argparse.Namespace) -> None:
+    from .curate import curate
+
+    candidates = sorted(p for p in Path(a.candidates).iterdir()
+                        if p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
+    winners = curate(candidates, a.hero, out_dir=a.output, keep=a.keep,
+                     min_quality=a.min_quality)
+    print(f"kept {len(winners)}/{len(candidates)} -> {a.output}")
+    for s in winners:
+        print(f"  identity={s.identity:.3f} quality={s.quality:+.3f}  {s.path.name}")
+
+
 def _cmd_palette_show(a: argparse.Namespace) -> None:
     from .palette import Palette
 
@@ -146,6 +185,47 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("--cell", type=int, default=16,
                         help="swatch cell size in pixels")
     p_show.set_defaults(func=_cmd_palette_show)
+
+    p_ds = sub.add_parser("dataset", help="prepare LoRA training datasets")
+    ds_sub = p_ds.add_subparsers(dest="dataset_command", required=True)
+    p_prep = ds_sub.add_parser("prep", help="build a kohya_ss-ready dataset")
+    p_prep.add_argument("images", nargs="+")
+    p_prep.add_argument("-o", "--output", required=True, help="dataset directory")
+    p_prep.add_argument("--trigger", required=True,
+                        help="unique trigger token baked into every caption")
+    p_prep.add_argument("--repeats", type=int, default=10)
+    p_prep.add_argument("--class-word", default=None,
+                        help='optional class word, e.g. "character"')
+    p_prep.add_argument("--name", default=None, help="LoRA output name")
+    p_prep.set_defaults(func=_cmd_dataset_prep)
+
+    p_ref = sub.add_parser(
+        "refine", help="img2img variations from a hero image (the ratchet)")
+    p_ref.add_argument("hero", help="the anchor image")
+    p_ref.add_argument("--prompt", required=True,
+                       help="base character description")
+    p_ref.add_argument("-o", "--output", default="refined",
+                       help="output directory for candidates")
+    p_ref.add_argument("--per-variation", type=int, default=6)
+    p_ref.add_argument("--strength", type=float, default=0.5,
+                       help="img2img denoise strength (0=copy, 1=ignore anchor)")
+    p_ref.add_argument("--character-lora", default=None,
+                       help="stack a trained character LoRA (ratchet rounds >= 2)")
+    p_ref.add_argument("--seed", type=int, default=0)
+    ref_fp = p_ref.add_mutually_exclusive_group()
+    ref_fp.add_argument("--fp16", action="store_true")
+    ref_fp.add_argument("--fp32", action="store_true")
+    p_ref.set_defaults(func=_cmd_refine)
+
+    p_cur = sub.add_parser(
+        "curate", help="auto-select the best candidates via CLIP scoring")
+    p_cur.add_argument("candidates", help="directory of candidate images")
+    p_cur.add_argument("--hero", required=True, help="the identity anchor image")
+    p_cur.add_argument("-o", "--output", default="curated")
+    p_cur.add_argument("--keep", type=int, default=10)
+    p_cur.add_argument("--min-quality", type=float, default=0.0,
+                       help="quality-margin bar candidates must clear")
+    p_cur.set_defaults(func=_cmd_curate)
 
     return parser
 
