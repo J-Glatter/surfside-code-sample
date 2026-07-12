@@ -286,7 +286,7 @@ def execute_plan(
     results["sprite"] = sprite_path
 
     if plan.actions:
-        from .animate.procedural import PROCEDURAL_ACTIONS
+        from .animate.procedural import PROCEDURAL_ACTIONS, PROCEDURAL_FPS
         from .animate.sheet import save_sheet
         from .preview import make_gif
 
@@ -301,10 +301,11 @@ def execute_plan(
             frames_dir.mkdir(exist_ok=True)
             for k, frame in enumerate(frames):
                 frame.save(frames_dir / f"{action}_{k:02d}.png")
-            make_gif(frames, out_dir / f"{action}.gif", fps=12, scale=2)
+            make_gif(frames, out_dir / f"{action}.gif",
+                     fps=PROCEDURAL_FPS.get(action, 10), scale=2)
             sheet_frames[action] = frames
         if sheet_frames:
-            save_sheet(sheet_frames, out_dir / "sheet.png")
+            save_sheet(sheet_frames, out_dir / "sheet.png", fps=PROCEDURAL_FPS)
             results.update(sheet=out_dir / "sheet.png",
                            actions=sorted(sheet_frames))
     return results

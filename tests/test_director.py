@@ -66,10 +66,14 @@ def test_execute_static_prop_with_sway(exec_env, tmp_path):
 
     results = execute_plan(plan, tmp_path, pipe=exec_env)
 
-    assert len(list((tmp_path / "sway").glob("*.png"))) == 8
+    assert len(list((tmp_path / "sway").glob("*.png"))) == 12
     assert (tmp_path / "sway.gif").exists()
     assert (tmp_path / "sheet.png").exists()
     assert results["actions"] == ["sway"]
+    import json
+
+    sheet_meta = json.loads((tmp_path / "sheet.json").read_text())
+    assert sheet_meta["actions"]["sway"]["fps"] == 8  # ambient motions run slow
 
 
 def test_plan_json_round_trip():

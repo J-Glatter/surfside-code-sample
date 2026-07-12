@@ -82,5 +82,23 @@ def test_sway_loops_seamlessly():
     assert np.array_equal(alpha0, alpha4)
 
 
+def test_sway_bias_leans_into_the_wind():
+    from spriteforge.animate.procedural import sway_cycle
+
+    frames = sway_cycle(_sprite((20, 60)), frames=8, amount=0.03, bias=0.05)
+
+    def top_center(img):
+        alpha = np.asarray(img)[..., 3]
+        xs = np.nonzero(alpha[0])[0]
+        return float(xs.mean())
+
+    canvas_mid = (frames[0].width - 1) / 2
+    # every frame's canopy sits on the wind side of centre: bias > amount
+    assert all(top_center(f) > canvas_mid for f in frames)
+
+
 def test_action_registry():
+    from spriteforge.animate.procedural import PROCEDURAL_FPS
+
     assert set(PROCEDURAL_ACTIONS) == {"bounce", "idle", "sway"}
+    assert set(PROCEDURAL_FPS) == set(PROCEDURAL_ACTIONS)

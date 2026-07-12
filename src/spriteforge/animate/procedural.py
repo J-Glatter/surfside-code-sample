@@ -88,20 +88,23 @@ def idle_cycle(
 
 def sway_cycle(
     sprite: Image.Image,
-    frames: int = 8,
-    amount: float = 0.10,
+    frames: int = 12,
+    amount: float = 0.05,
+    bias: float = 0.0,
 ) -> list[Image.Image]:
     """Wind sway: a sinusoidal horizontal shear pivoting at the base row —
-    the trunk stays planted while the top leans. `amount` is the top's peak
-    lean as a fraction of sprite height. For trees, flags, plants, lanterns."""
+    the trunk stays planted while the top leans. `amount` is the oscillation's
+    peak lean as a fraction of sprite height; `bias` is a constant lean in the
+    wind's direction, so the sprite rocks around a pushed position instead of
+    metronoming symmetrically. For trees, flags, plants, lanterns."""
     sprite = sprite.convert("RGBA")
     w, h = sprite.size
-    reach = math.ceil(amount * (h - 1)) + 1      # how far the top can lean
+    reach = math.ceil((amount + abs(bias)) * (h - 1)) + 1  # max lean either way
     canvas = (w + 2 * reach, h)
 
     out = []
     for k in range(frames):
-        s = amount * math.sin(2 * math.pi * k / frames)
+        s = bias + amount * math.sin(2 * math.pi * k / frames)
         staged = _stage(sprite, sprite, canvas)
         # affine maps output->input: pixels at height y shift by s*(H-1-y),
         # zero at the base row, maximal at the top
@@ -118,4 +121,11 @@ PROCEDURAL_ACTIONS = {
     "bounce": bounce_cycle,
     "idle": idle_cycle,
     "sway": sway_cycle,
+}
+
+# natural playback rates — ambient motions run slow, action motions snappy
+PROCEDURAL_FPS = {
+    "bounce": 14,
+    "idle": 6,
+    "sway": 8,
 }
