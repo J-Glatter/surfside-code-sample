@@ -86,7 +86,36 @@ def idle_cycle(
     return out
 
 
+def sway_cycle(
+    sprite: Image.Image,
+    frames: int = 8,
+    amount: float = 0.10,
+) -> list[Image.Image]:
+    """Wind sway: a sinusoidal horizontal shear pivoting at the base row —
+    the trunk stays planted while the top leans. `amount` is the top's peak
+    lean as a fraction of sprite height. For trees, flags, plants, lanterns."""
+    sprite = sprite.convert("RGBA")
+    w, h = sprite.size
+    reach = math.ceil(amount * (h - 1)) + 1      # how far the top can lean
+    canvas = (w + 2 * reach, h)
+
+    out = []
+    for k in range(frames):
+        s = amount * math.sin(2 * math.pi * k / frames)
+        staged = _stage(sprite, sprite, canvas)
+        # affine maps output->input: pixels at height y shift by s*(H-1-y),
+        # zero at the base row, maximal at the top
+        sheared = staged.transform(
+            canvas, Image.AFFINE,
+            (1, s, -s * (h - 1), 0, 1, 0),
+            resample=Image.NEAREST,
+        )
+        out.append(sheared)
+    return out
+
+
 PROCEDURAL_ACTIONS = {
     "bounce": bounce_cycle,
     "idle": idle_cycle,
+    "sway": sway_cycle,
 }

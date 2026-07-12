@@ -50,5 +50,37 @@ def test_idle_breathes_in_place():
     assert max(heights) > min(heights)           # it does actually breathe
 
 
+def test_sway_pivots_at_the_base():
+    from spriteforge.animate.procedural import sway_cycle
+
+    frames = sway_cycle(_sprite((20, 60)), frames=8, amount=0.2)
+    assert len(frames) == 8
+    assert len({f.size for f in frames}) == 1     # constant canvas
+
+    def row_center(img, y):
+        alpha = np.asarray(img)[..., 3]
+        xs = np.nonzero(alpha[y])[0]
+        return float(xs.mean()) if len(xs) else None
+
+    base_y, top_y = 59, 0
+    base_centers = [row_center(f, base_y) for f in frames]
+    top_centers = [row_center(f, top_y) for f in frames]
+    # trunk planted, canopy leaning both ways across the cycle
+    assert max(base_centers) - min(base_centers) <= 1.5
+    assert max(top_centers) - min(top_centers) >= 0.2 * 60 * 1.2  # ~both peaks
+
+
+def test_sway_loops_seamlessly():
+    from spriteforge.animate.procedural import sway_cycle
+
+    frames = sway_cycle(_sprite((20, 40)), frames=8)
+    # frame 0 has zero shear; the cycle returns to it (sin(0) == sin(2pi))
+    again = sway_cycle(_sprite((20, 40)), frames=8)
+    assert np.array_equal(np.asarray(frames[0]), np.asarray(again[0]))
+    alpha0 = np.asarray(frames[0])[..., 3]
+    alpha4 = np.asarray(frames[4])[..., 3]        # half cycle also unsheared
+    assert np.array_equal(alpha0, alpha4)
+
+
 def test_action_registry():
-    assert set(PROCEDURAL_ACTIONS) == {"bounce", "idle"}
+    assert set(PROCEDURAL_ACTIONS) == {"bounce", "idle", "sway"}

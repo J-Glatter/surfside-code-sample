@@ -43,6 +43,9 @@ prompt for Stable Diffusion 1.5.
 
 Workstreams:
 - static_prop: inanimate objects and portraits (a sword, a chest, a tree).
+  Optionally animated procedurally — actions from: sway (trees, flags, plants,
+  hanging signs — anything the wind moves), idle. Leave actions empty for
+  truly static objects.
 - simple_creature: limbless creatures animated by procedural squash & stretch
   (slimes, blobs, ghosts, coins, floating orbs). actions from: bounce, idle.
 - limbed_character: anything with arms/legs needing pose-driven animation
@@ -102,6 +105,9 @@ _BLOB_WORDS = {"slime", "blob", "ghost", "jelly", "orb", "coin", "gem", "crystal
 _LIMBED_WORDS = {"knight", "wizard", "warrior", "archer", "hero", "character",
                  "person", "man", "woman", "goblin", "skeleton", "zombie", "orc",
                  "villager", "monster", "dragon", "wolf", "soldier", "npc", "boss"}
+_SWAY_WORDS = {"tree", "flag", "banner", "plant", "flower", "bush", "sapling",
+               "palm", "reed", "vine", "lantern", "sign", "sway", "swaying",
+               "wind", "waving", "fluttering"}
 
 
 def heuristic_decider(prompt: str) -> Plan:
@@ -121,11 +127,15 @@ def heuristic_decider(prompt: str) -> Plan:
         workstream, size = "static_prop", 256
         enriched = f"{prompt}, centered, plain background"
 
+    actions = list(_DEFAULT_ACTIONS.get(workstream, []))
+    if workstream == "static_prop" and words & _SWAY_WORDS:
+        actions = ["sway"]
+
     return Plan(
         workstream=workstream,
         enriched_prompt=enriched,
         size=size,
-        actions=list(_DEFAULT_ACTIONS.get(workstream, [])),
+        actions=actions,
         reasoning="keyword heuristic",
         source="heuristic",
     )
@@ -267,14 +277,15 @@ def execute_plan(
         results.update(heroes=heroes, next_steps=out_dir / "NEXT_STEPS.md")
         return results
 
-    # static_prop and simple_creature share the single-sprite start
+    # static_prop and simple_creature share the single-sprite start; both may
+    # carry procedural actions (a slime bounces, a tree sways, a chest is still)
     raw = _generate()
     sprite = pixelize(raw, size=plan.size, colors=plan.colors, palette=palette)
     sprite_path = out_dir / "sprite.png"
     sprite.save(sprite_path)
     results["sprite"] = sprite_path
 
-    if plan.workstream == "simple_creature" and plan.actions:
+    if plan.actions:
         from .animate.procedural import PROCEDURAL_ACTIONS
         from .animate.sheet import save_sheet
         from .preview import make_gif

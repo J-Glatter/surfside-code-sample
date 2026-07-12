@@ -50,6 +50,28 @@ def test_heuristic_defaults():
     assert heuristic_decider("a chest").actions == []
 
 
+def test_heuristic_sway_props():
+    for prompt in ("a tree swaying in the wind", "an old oak tree",
+                   "a tattered flag on a pole"):
+        plan = heuristic_decider(prompt)
+        assert plan.workstream == "static_prop", prompt
+        assert plan.actions == ["sway"], prompt
+    # motion words alone also trigger it
+    assert heuristic_decider("a scarecrow waving in the wind").actions == ["sway"]
+
+
+def test_execute_static_prop_with_sway(exec_env, tmp_path):
+    plan = Plan(workstream="static_prop", enriched_prompt="a tree",
+                size=48, actions=["sway"])
+
+    results = execute_plan(plan, tmp_path, pipe=exec_env)
+
+    assert len(list((tmp_path / "sway").glob("*.png"))) == 8
+    assert (tmp_path / "sway.gif").exists()
+    assert (tmp_path / "sheet.png").exists()
+    assert results["actions"] == ["sway"]
+
+
 def test_plan_json_round_trip():
     plan = heuristic_decider("a small slime monster")
     assert Plan.from_json(plan.to_json()) == plan
