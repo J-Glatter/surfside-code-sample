@@ -1,14 +1,16 @@
 # spriteforge — Build Plan
 
-> **Status (2026-07-12):** Milestones A–D are built and CI-tested (91 tests),
-> plus seamless tiling (§19 item), GIF preview, and GitHub Actions CI. The real
-> diffusion plumbing (denoising loop, scheduler swap, tiling patch, pixelize/
-> palette hookup) is integration-tested against actual torch+diffusers on a tiny
-> offline model (tests/test_integration_tiny_sd.py). Not yet validated anywhere:
-> hub downloads (SD 1.5 weights, LoRA fetch) — the dev container's egress policy
+> **Status (2026-07-12):** Milestones A–E are built and CI-tested (118 tests):
+> the full generation/palette/LoRA/animation pipeline, seamless tiling, GIF
+> preview, procedural animation (bounce/idle/sway), the LLM director
+> (`plan`/`make`), and GitHub Actions CI. The real diffusion plumbing is
+> integration-tested against actual torch+diffusers on a tiny offline model
+> (tests/test_integration_tiny_sd.py). Not yet validated anywhere: hub
+> downloads (SD 1.5 weights, LoRA fetch) — the dev container's egress policy
 > blocks huggingface.co — and everything GPU: see
-> [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) (Checkpoint A/B → C → the task-15
-> selector experiment).
+> [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) (Checkpoint A/B → C → the
+> task-15 selector experiment). First command on an unrestricted machine:
+> `pip install -e ".[generate,director]" && spriteforge make "a small slime monster"`.
 
 > Engineering plan for the pixel-art generation & animation pipeline specified in
 > [`reference/HANDOVER.md`](reference/HANDOVER.md). This document is the actionable
