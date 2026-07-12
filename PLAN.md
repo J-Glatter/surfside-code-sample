@@ -1,5 +1,9 @@
 # spriteforge — Build Plan
 
+> **Status (2026-07-12):** Milestones A–D are built and CI-tested (80 tests).
+> Remaining: the user-run GPU checkpoints — see [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md)
+> for the exact commands (Checkpoint A/B → C → the task-15 selector experiment).
+
 > Engineering plan for the pixel-art generation & animation pipeline specified in
 > [`reference/HANDOVER.md`](reference/HANDOVER.md). This document is the actionable
 > distillation: what gets built, in what order, how it's tested, and which decisions

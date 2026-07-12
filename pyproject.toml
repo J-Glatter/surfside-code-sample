@@ -27,6 +27,14 @@ curate = [
     "torch>=2.1",
     "transformers>=4.38",
 ]
+# Pose-controlled animation (superset of [generate])
+animate = [
+    "torch>=2.1",
+    "diffusers>=0.27",
+    "transformers>=4.38",
+    "accelerate>=0.27",
+    "peft>=0.9",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.4",

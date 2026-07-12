@@ -123,6 +123,68 @@ def _cmd_curate(a: argparse.Namespace) -> None:
         print(f"  identity={s.identity:.3f} quality={s.quality:+.3f}  {s.path.name}")
 
 
+def _cmd_skeleton(a: argparse.Namespace) -> None:
+    from .animate.skeleton import ACTIONS, DEFAULT_FRAMES, render_openpose, save_poses
+
+    out = Path(a.output)
+    out.mkdir(parents=True, exist_ok=True)
+    poses = ACTIONS[a.action](a.frames or DEFAULT_FRAMES[a.action])
+    for k, pose in enumerate(poses):
+        render_openpose(pose, size=a.size).save(out / f"{a.action}_{k:02d}.png")
+    save_poses(poses, out / f"{a.action}.json")
+    print(f"wrote {len(poses)} conditioning frames + {a.action}.json to {out}")
+
+
+def _cmd_animate(a: argparse.Namespace) -> None:
+    # Lazy: needs the [animate] extra — GPU boxes only.
+    from .animate.frames import build_animation_pipe
+    from .animate.pipeline import animate_action
+
+    fp16 = True if a.fp16 else False if a.fp32 else None
+    pipe = build_animation_pipe(character_lora=a.character_lora, fp16=fp16)
+    out = Path(a.output)
+    out.mkdir(parents=True, exist_ok=True)
+    print(f"animating {a.action}: {a.frames or 'default'} frames x "
+          f"{a.candidates} candidates...")
+    locked, selection = animate_action(
+        pipe, a.action, a.prompt,
+        size=a.size, colors=a.colors, palette=_load_palette(a),
+        frames=a.frames, n_candidates=a.candidates, seed=a.seed,
+        raw_dir=a.raw_dir,
+    )
+    for k, frame in enumerate(locked):
+        frame.save(out / f"{a.action}_{k:02d}.png")
+    avg = sum(selection.costs[1:]) / max(1, len(selection.costs) - 1)
+    print(f"wrote {len(locked)} frames to {out} "
+          f"(mean transition cost {avg:.4f}; lower = smoother)")
+
+
+def _cmd_sheet(a: argparse.Namespace) -> None:
+    from PIL import Image
+
+    from .animate.sheet import save_sheet
+
+    actions: dict[str, list] = {}
+    for spec in a.actions:
+        if "=" not in spec:
+            raise SystemExit(f"expected ACTION=FRAMES_DIR, got {spec!r}")
+        name, dir_ = spec.split("=", 1)
+        frames = sorted(Path(dir_).glob("*.png"))
+        if not frames:
+            raise SystemExit(f"no .png frames in {dir_}")
+        actions[name] = [Image.open(p) for p in frames]
+
+    fps = {}
+    for spec in a.fps or []:
+        name, value = spec.split("=", 1)
+        fps[name] = int(value)
+
+    metadata = save_sheet(actions, a.output, fps=fps or None)
+    print(f"wrote {a.output} + sidecar json "
+          f"({metadata['columns']}x{metadata['rows']} cells of "
+          f"{metadata['cell_width']}x{metadata['cell_height']})")
+
+
 def _cmd_palette_show(a: argparse.Namespace) -> None:
     from .palette import Palette
 
@@ -226,6 +288,42 @@ def build_parser() -> argparse.ArgumentParser:
     p_cur.add_argument("--min-quality", type=float, default=0.0,
                        help="quality-margin bar candidates must clear")
     p_cur.set_defaults(func=_cmd_curate)
+
+    p_skel = sub.add_parser(
+        "skeleton", help="dump pose-conditioning images for an action (CPU)")
+    p_skel.add_argument("--action", choices=("walk", "run", "jump"), required=True)
+    p_skel.add_argument("-o", "--output", default="skeletons")
+    p_skel.add_argument("--frames", type=int, default=None)
+    p_skel.add_argument("--size", type=int, default=512)
+    p_skel.set_defaults(func=_cmd_skeleton)
+
+    p_anim = sub.add_parser(
+        "animate", help="generate an animated action via pose control + selection")
+    p_anim.add_argument("prompt", help="character description")
+    p_anim.add_argument("--action", choices=("walk", "run", "jump"), required=True)
+    p_anim.add_argument("-o", "--output", default="frames")
+    p_anim.add_argument("--frames", type=int, default=None,
+                        help="frame count (default: per-action canonical)")
+    p_anim.add_argument("--candidates", type=int, default=100,
+                        help="candidates generated per frame")
+    p_anim.add_argument("--size", type=int, default=DEFAULT_SIZE)
+    p_anim.add_argument("--colors", type=int, default=DEFAULT_COLORS)
+    p_anim.add_argument("--palette", default=None, metavar="FILE")
+    p_anim.add_argument("--character-lora", default=None)
+    p_anim.add_argument("--seed", type=int, default=0)
+    p_anim.add_argument("--raw-dir", default=None,
+                        help="also keep the raw 512px candidates here (debug)")
+    anim_fp = p_anim.add_mutually_exclusive_group()
+    anim_fp.add_argument("--fp16", action="store_true")
+    anim_fp.add_argument("--fp32", action="store_true")
+    p_anim.set_defaults(func=_cmd_animate)
+
+    p_sheet = sub.add_parser("sheet", help="pack frame dirs into a sprite sheet")
+    p_sheet.add_argument("actions", nargs="+", metavar="ACTION=FRAMES_DIR")
+    p_sheet.add_argument("-o", "--output", default="sheet.png")
+    p_sheet.add_argument("--fps", action="append", metavar="ACTION=FPS",
+                         help="fps hint per action (repeatable)")
+    p_sheet.set_defaults(func=_cmd_sheet)
 
     return parser
 

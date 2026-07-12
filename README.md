@@ -30,10 +30,26 @@ spriteforge pixelize input.png -o out.png --size 256 --colors 16 --preview 4
 
 # Prompt -> sprite (needs [generate]; first run downloads ~4 GB of model weights)
 spriteforge generate "a brave knight in green armour, full body" -o knight.png --seed 7
+
+# World cohesion: lock one palette for every asset (handover §15)
+spriteforge palette extract best1.png best2.png best3.png -o game.json
+spriteforge generate "a small slime monster" -o slime.png --palette game.json
+
+# Character pipeline: hero -> variations -> auto-curate -> kohya LoRA dataset
+spriteforge refine hero.png --prompt "a brave knight" -o candidates
+spriteforge curate candidates --hero hero.png -o keep --keep 10    # [curate] extra
+spriteforge dataset prep keep/*.png -o knight_ds --trigger sks_knight
+
+# Animation: pose-controlled candidates + continuity-scored selection ([animate] extra)
+spriteforge skeleton --action walk -o skel_preview                 # eyeball the cycle (CPU)
+spriteforge animate "a brave knight, sks_knight" --action walk -o frames/walk \
+    --character-lora knight_ds/output/sks_knight.safetensors --palette game.json
+spriteforge sheet walk=frames/walk -o knight_sheet.png             # + JSON sidecar
 ```
 
 Device selection is automatic (CUDA → MPS → CPU) with fp16 on CUDA and fp32 on
-MPS; override with `--fp16` / `--fp32`.
+MPS; override with `--fp16` / `--fp32`. GPU validation runbook:
+[`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md).
 
 ## How it works
 
