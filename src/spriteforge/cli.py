@@ -62,6 +62,11 @@ def _cmd_generate(a: argparse.Namespace) -> None:
     fp16 = True if a.fp16 else False if a.fp32 else None  # None = auto per device
     use_lora = not a.no_lora
     pipe = build_pipe(fp16=fp16, use_lora=use_lora)
+    if a.tile:
+        from .tiling import enable_tiling
+
+        patched = enable_tiling(pipe)
+        print(f"seamless tiling on ({patched} conv layers wrapped)")
     print("generating...")
     raw = generate(pipe, a.prompt, negative=a.negative, steps=a.steps,
                    guidance=a.guidance, seed=a.seed, use_lora=use_lora)
@@ -185,6 +190,13 @@ def _cmd_sheet(a: argparse.Namespace) -> None:
           f"{metadata['cell_width']}x{metadata['cell_height']})")
 
 
+def _cmd_preview(a: argparse.Namespace) -> None:
+    from .preview import gif_from_dir
+
+    out = gif_from_dir(a.frames, a.output, fps=a.fps, scale=a.scale)
+    print(f"wrote {out} ({a.fps} fps, {a.scale}x)")
+
+
 def _cmd_palette_show(a: argparse.Namespace) -> None:
     from .palette import Palette
 
@@ -225,6 +237,8 @@ def build_parser() -> argparse.ArgumentParser:
     fp.add_argument("--fp16", action="store_true", help="force float16 (auto-on for CUDA)")
     fp.add_argument("--fp32", action="store_true", help="force float32 (auto-on for MPS/CPU)")
     p_gen.add_argument("--raw", help="also save the pre-pixelized 512px render here")
+    p_gen.add_argument("--tile", action="store_true",
+                       help="seamless mode for environment tiles (wraps edge-to-edge)")
     p_gen.set_defaults(func=_cmd_generate)
 
     p_pal = sub.add_parser("palette", help="create and inspect locked palettes")
@@ -324,6 +338,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_sheet.add_argument("--fps", action="append", metavar="ACTION=FPS",
                          help="fps hint per action (repeatable)")
     p_sheet.set_defaults(func=_cmd_sheet)
+
+    p_prev = sub.add_parser(
+        "preview", help="loop a directory of frames as a GIF at game speed")
+    p_prev.add_argument("frames", help="directory of frame PNGs (sorted by name)")
+    p_prev.add_argument("-o", "--output", default="preview.gif")
+    p_prev.add_argument("--fps", type=int, default=10)
+    p_prev.add_argument("--scale", type=int, default=4,
+                        help="nearest-neighbour upscale factor")
+    p_prev.set_defaults(func=_cmd_preview)
 
     return parser
 

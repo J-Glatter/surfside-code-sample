@@ -40,10 +40,14 @@ spriteforge refine hero.png --prompt "a brave knight" -o candidates
 spriteforge curate candidates --hero hero.png -o keep --keep 10    # [curate] extra
 spriteforge dataset prep keep/*.png -o knight_ds --trigger sks_knight
 
+# Environment tiles that wrap edge-to-edge
+spriteforge generate "grassy meadow ground texture, top-down" -o grass.png --tile --palette game.json
+
 # Animation: pose-controlled candidates + continuity-scored selection ([animate] extra)
 spriteforge skeleton --action walk -o skel_preview                 # eyeball the cycle (CPU)
 spriteforge animate "a brave knight, sks_knight" --action walk -o frames/walk \
     --character-lora knight_ds/output/sks_knight.safetensors --palette game.json
+spriteforge preview frames/walk -o walk.gif --fps 10 --scale 4     # judge it at game speed
 spriteforge sheet walk=frames/walk -o knight_sheet.png             # + JSON sidecar
 ```
 
