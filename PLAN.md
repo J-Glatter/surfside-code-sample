@@ -1,8 +1,14 @@
 # spriteforge — Build Plan
 
-> **Status (2026-07-12):** Milestones A–D are built and CI-tested (80 tests).
-> Remaining: the user-run GPU checkpoints — see [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md)
-> for the exact commands (Checkpoint A/B → C → the task-15 selector experiment).
+> **Status (2026-07-12):** Milestones A–D are built and CI-tested (91 tests),
+> plus seamless tiling (§19 item), GIF preview, and GitHub Actions CI. The real
+> diffusion plumbing (denoising loop, scheduler swap, tiling patch, pixelize/
+> palette hookup) is integration-tested against actual torch+diffusers on a tiny
+> offline model (tests/test_integration_tiny_sd.py). Not yet validated anywhere:
+> hub downloads (SD 1.5 weights, LoRA fetch) — the dev container's egress policy
+> blocks huggingface.co — and everything GPU: see
+> [`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) (Checkpoint A/B → C → the task-15
+> selector experiment).
 
 > Engineering plan for the pixel-art generation & animation pipeline specified in
 > [`reference/HANDOVER.md`](reference/HANDOVER.md). This document is the actionable
