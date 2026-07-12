@@ -19,9 +19,20 @@ def _add_common_output_args(p: argparse.ArgumentParser, default_output: str) -> 
     p.add_argument("-o", "--output", default=default_output)
     p.add_argument("--size", type=int, default=DEFAULT_SIZE,
                    help="final sprite size, longest side in pixels")
-    p.add_argument("--colors", type=int, default=DEFAULT_COLORS, help="palette size")
+    p.add_argument("--colors", type=int, default=DEFAULT_COLORS,
+                   help="palette size (ignored with --palette)")
+    p.add_argument("--palette", default=None, metavar="FILE",
+                   help="locked palette (.json/.hex/.png) — world cohesion mode")
     p.add_argument("--preview", type=int, default=0,
                    help="also save an Nx nearest-neighbour preview (0 = off)")
+
+
+def _load_palette(a: argparse.Namespace):
+    if a.palette is None:
+        return None
+    from .palette import Palette
+
+    return Palette.load(a.palette)
 
 
 def _save_sprite(sprite, output: str, colors: int, preview: int) -> None:
@@ -38,7 +49,8 @@ def _cmd_pixelize(a: argparse.Namespace) -> None:
 
     src = Image.open(a.input)
     sprite = pixelize(src, size=a.size, colors=a.colors,
-                      alpha_threshold=a.alpha_threshold, seed=a.seed)
+                      alpha_threshold=a.alpha_threshold, seed=a.seed,
+                      palette=_load_palette(a))
     _save_sprite(sprite, a.output, a.colors, a.preview)
 
 
@@ -56,8 +68,32 @@ def _cmd_generate(a: argparse.Namespace) -> None:
         raw.save(a.raw)
         print(f"wrote raw render {a.raw}")
 
-    sprite = pixelize(raw, size=a.size, colors=a.colors)
+    sprite = pixelize(raw, size=a.size, colors=a.colors, palette=_load_palette(a))
     _save_sprite(sprite, a.output, a.colors, a.preview)
+
+
+def _cmd_palette_extract(a: argparse.Namespace) -> None:
+    from PIL import Image
+
+    from .palette import Palette
+
+    images = [Image.open(p) for p in a.images]
+    pal = Palette.extract(images, colors=a.colors, seed=a.seed,
+                          name=a.name or "extracted")
+    pal.save(a.output)
+    print(f"wrote {a.output} ({len(pal)} colours): {' '.join(pal.hex_colors)}")
+
+
+def _cmd_palette_show(a: argparse.Namespace) -> None:
+    from .palette import Palette
+
+    pal = Palette.load(a.palette)
+    print(f"{pal.name}: {len(pal)} colours")
+    for h in pal.hex_colors:
+        print(f"  {h}")
+    if a.swatch:
+        pal.to_swatch(cell=a.cell).save(a.swatch)
+        print(f"wrote {a.swatch}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,6 +125,27 @@ def build_parser() -> argparse.ArgumentParser:
     fp.add_argument("--fp32", action="store_true", help="force float32 (auto-on for MPS/CPU)")
     p_gen.add_argument("--raw", help="also save the pre-pixelized 512px render here")
     p_gen.set_defaults(func=_cmd_generate)
+
+    p_pal = sub.add_parser("palette", help="create and inspect locked palettes")
+    pal_sub = p_pal.add_subparsers(dest="palette_command", required=True)
+
+    p_ext = pal_sub.add_parser(
+        "extract", help="derive a shared palette from reference images")
+    p_ext.add_argument("images", nargs="+")
+    p_ext.add_argument("-o", "--output", default="palette.json",
+                       help="output palette (.json/.hex/.png)")
+    p_ext.add_argument("--colors", type=int, default=DEFAULT_COLORS)
+    p_ext.add_argument("--seed", type=int, default=0)
+    p_ext.add_argument("--name", default=None)
+    p_ext.set_defaults(func=_cmd_palette_extract)
+
+    p_show = pal_sub.add_parser("show", help="print a palette's colours")
+    p_show.add_argument("palette")
+    p_show.add_argument("--swatch", default=None, metavar="FILE",
+                        help="also save a swatch PNG here")
+    p_show.add_argument("--cell", type=int, default=16,
+                        help="swatch cell size in pixels")
+    p_show.set_defaults(func=_cmd_palette_show)
 
     return parser
 

@@ -17,11 +17,16 @@ default target size raised 64 -> 256 per the project's grid decision (PLAN.md §
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 from PIL import Image
 
 from .color import linear_to_srgb, oklab_to_linear, srgb_to_oklab
 from .kmeans import kmeans
+
+if TYPE_CHECKING:
+    from .palette import Palette
 
 DEFAULT_SIZE = 256
 DEFAULT_COLORS = 16
@@ -33,8 +38,14 @@ def pixelize(
     colors: int = DEFAULT_COLORS,
     alpha_threshold: int = 128,
     seed: int = 0,
+    palette: Palette | None = None,
 ) -> Image.Image:
-    """Return a small RGBA pixel-art image (longest side == `size`)."""
+    """Return a small RGBA pixel-art image (longest side == `size`).
+
+    With `palette` set, every opaque pixel maps to the nearest locked-palette
+    colour (OKLab distance) instead of a per-image k-means palette — the world
+    cohesion mode (handover §15). `colors` is ignored in that case.
+    """
     img = img.convert("RGBA")
     w, h = img.size
 
@@ -47,15 +58,19 @@ def pixelize(
     rgb, alpha = arr[..., :3], arr[..., 3]
     opaque = alpha >= alpha_threshold          # only cluster real pixels
 
-    # 2. Palette quantise in OKLab over the opaque pixels.
-    lab = srgb_to_oklab(rgb)
-    flat = lab[opaque]
+    # 2. Palette quantise over the opaque pixels: locked palette if given,
+    #    otherwise per-image k-means in OKLab.
     out_rgb = rgb.copy()
-    if flat.shape[0] > 0:
-        distinct = np.unique(np.round(flat, 4), axis=0).shape[0]
-        k = max(1, min(colors, distinct))
-        centers, labels = kmeans(flat, k, seed=seed)
-        out_rgb[opaque] = linear_to_srgb(oklab_to_linear(centers[labels]))
+    if opaque.any():
+        if palette is not None:
+            out_rgb[opaque] = palette.map(rgb[opaque])
+        else:
+            lab = srgb_to_oklab(rgb)
+            flat = lab[opaque]
+            distinct = np.unique(np.round(flat, 4), axis=0).shape[0]
+            k = max(1, min(colors, distinct))
+            centers, labels = kmeans(flat, k, seed=seed)
+            out_rgb[opaque] = linear_to_srgb(oklab_to_linear(centers[labels]))
 
     # 3. Crisp alpha — no soft fringe.
     out_alpha = np.where(alpha >= alpha_threshold, 255, 0)

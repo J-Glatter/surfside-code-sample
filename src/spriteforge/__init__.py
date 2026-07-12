@@ -4,7 +4,9 @@ Pipeline: generate (SD 1.5 + LoRA, GPU) -> pixelize (CPU, deterministic) -> serv
 See PLAN.md and reference/HANDOVER.md for the full design.
 """
 
+from .palette import Palette
 from .pixelize import DEFAULT_COLORS, DEFAULT_SIZE, pixelize, upscale_preview
 
 __version__ = "0.1.0"
-__all__ = ["DEFAULT_COLORS", "DEFAULT_SIZE", "pixelize", "upscale_preview", "__version__"]
+__all__ = ["DEFAULT_COLORS", "DEFAULT_SIZE", "Palette", "pixelize", "upscale_preview",
+           "__version__"]
