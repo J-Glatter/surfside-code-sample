@@ -190,6 +190,34 @@ def _cmd_sheet(a: argparse.Namespace) -> None:
           f"{metadata['cell_width']}x{metadata['cell_height']})")
 
 
+def _cmd_plan(a: argparse.Namespace) -> None:
+    from .director import DIRECTOR_MODEL, plan_asset
+
+    plan = plan_asset(a.prompt, offline=a.offline, model=a.model or DIRECTOR_MODEL)
+    print(plan.to_json())
+
+
+def _cmd_make(a: argparse.Namespace) -> None:
+    from .director import DIRECTOR_MODEL, Plan, execute_plan, plan_asset
+
+    if a.plan_file:
+        plan = Plan.from_json(Path(a.plan_file).read_text())
+    elif a.prompt is None:
+        raise SystemExit("make: provide a PROMPT or --plan-file")
+    else:
+        plan = plan_asset(a.prompt, offline=a.offline, model=a.model or DIRECTOR_MODEL)
+    print(f"plan [{plan.source}]: {plan.workstream} — {plan.reasoning}")
+    print(f"  prompt: {plan.enriched_prompt}")
+
+    fp16 = True if a.fp16 else False if a.fp32 else None
+    results = execute_plan(plan, a.output, palette=_load_palette(a),
+                           seed=a.seed, fp16=fp16)
+    for key, value in results.items():
+        if isinstance(value, list):
+            value = ", ".join(str(v) for v in value)
+        print(f"  {key}: {value}")
+
+
 def _cmd_preview(a: argparse.Namespace) -> None:
     from .preview import gif_from_dir
 
@@ -347,6 +375,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_prev.add_argument("--scale", type=int, default=4,
                         help="nearest-neighbour upscale factor")
     p_prev.set_defaults(func=_cmd_preview)
+
+    p_plan = sub.add_parser(
+        "plan", help="route a request to a workstream (LLM director, stage 0)")
+    p_plan.add_argument("prompt", help="the asset request")
+    p_plan.add_argument("--offline", action="store_true",
+                        help="use keyword heuristics instead of the LLM")
+    p_plan.add_argument("--model", default=None,
+                        help="director model (default: claude-opus-4-8)")
+    p_plan.set_defaults(func=_cmd_plan)
+
+    p_make = sub.add_parser(
+        "make", help="plan a request and run the chosen workstream end-to-end")
+    p_make.add_argument("prompt", nargs="?", default=None,
+                        help="the asset request (omit with --plan-file)")
+    p_make.add_argument("--plan-file", default=None,
+                        help="execute a saved/edited plan JSON instead of planning")
+    p_make.add_argument("-o", "--output", default="assets")
+    p_make.add_argument("--palette", default=None, metavar="FILE")
+    p_make.add_argument("--seed", type=int, default=0)
+    p_make.add_argument("--offline", action="store_true")
+    p_make.add_argument("--model", default=None)
+    make_fp = p_make.add_mutually_exclusive_group()
+    make_fp.add_argument("--fp16", action="store_true")
+    make_fp.add_argument("--fp32", action="store_true")
+    p_make.set_defaults(func=_cmd_make)
 
     return parser
 

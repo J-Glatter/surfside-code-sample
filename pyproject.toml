@@ -35,6 +35,10 @@ animate = [
     "accelerate>=0.27",
     "peft>=0.9",
 ]
+# The LLM director (stage 0 routing) — CPU-light, needs ANTHROPIC_API_KEY
+director = [
+    "anthropic>=0.60",
+]
 dev = [
     "pytest>=8",
     "ruff>=0.4",

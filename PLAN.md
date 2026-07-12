@@ -146,9 +146,20 @@ on the 3080 (Checkpoint C, task 11) with drastically reduced hand-curation.
   metrics + eyeball. **This evidence decides build-vs-buy for animation** before any
   SaaS bet (§19's top open problem).
 
+### Milestone E — the LLM director (stage 0; added by user decision)
+
+`spriteforge plan` / `spriteforge make`: Claude (structured outputs, default
+`claude-opus-4-8`, `[director]` extra) routes a request to a workstream —
+static_prop / simple_creature / limbed_character / environment_tile — and
+enriches the prompt for SD. simple_creature introduced procedural squash &
+stretch animation (`animate/procedural.py`): blobs never need diffusion frames.
+Deterministic keyword-heuristic fallback keeps everything working offline/CI;
+each workstream stays directly invocable. This is the SaaS front door
+("customer types a prompt") built early because it also removes routing
+friction from the personal tool.
+
 ### Out of scope for now
 LAN web UI (§7 — deprioritised by user), SDXL quality pass (§5 — revisit later),
-seamless environment tiles (§15/§19 — after Milestone B proves cohesion),
 all of SaaS/Phase 5 (§16–17 — gated on the task-15 experiment).
 
 ## 5. Test strategy

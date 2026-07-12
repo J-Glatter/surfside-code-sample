@@ -25,6 +25,14 @@ pytest
 ## Usage
 
 ```bash
+# Stage 0 — the LLM director routes a request to the right workstream
+# ([director] extra + ANTHROPIC_API_KEY; falls back to keyword heuristics without)
+spriteforge plan "a small slime monster"          # inspect the routing decision
+spriteforge make "a small slime monster" -o slime --palette game.json
+#   -> sprite + procedural bounce/idle frames + GIFs + sprite sheet, one command
+#   (tiles get --tile + seam check; limbed characters get hero candidates +
+#    ratchet next-steps, since LoRA training runs in kohya)
+
 # Convert any image into clean pixel art (pure CPU)
 spriteforge pixelize input.png -o out.png --size 256 --colors 16 --preview 4
 
