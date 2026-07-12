@@ -162,17 +162,24 @@ all of SaaS/Phase 5 (§16–17 — gated on the task-15 experiment).
 6. **Selector continuity scored in pixelized space** (proposed — cheap, artefact-true).
 7. **Hand-authored canonical skeletons first** for walk/run/jump.
 8. **Milestones gate on user-run GPU checkpoints** — nothing is "done" on mocks alone.
+9. **Default sprite grid: 256px** (user decision, was 64). Consequences: 512→256 is
+   only a 2× downscale, so the "small sprites hide wobble" effect (§12) largely
+   disappears — the animation milestone leans harder on the selector — and the SDXL
+   revisit (1024 native → 4× headroom) rises in priority. 16 colours may feel tight
+   at 256px; judge with real outputs at Checkpoint A/B. Size stays a parameter.
+10. **PixelLab comparison deferred** — no API account yet; revisit at Milestone D
+   (task 15 needs it or a substitute baseline).
 
 ## 7. Open questions (carried + new)
 
 - §19 carried: does the brute-force selector beat PixelLab / hand-cleanup? How much
   jitter survives LoRA + pose + selector? SDXL revisit. Tiling mode. Cold starts (SaaS).
-- **Sprite grid target:** 64px assumed as default — confirm the game's actual
-  character/tile sizes (affects skeleton proportions and how much wobble the
-  downscale hides).
+- **Logical vs display resolution at 256:** does "256" mean a 256px logical grid
+  (fine pixels), or a smaller logical grid (e.g. 64) displayed at 4× for the classic
+  chunky look? The pipeline supports both (size parameter + NN preview upscale);
+  worth settling when assets meet the game engine.
 - **Selector weights** (w₁ pose vs w₂ continuity) and candidate count (100 assumed)
   — tune empirically in task 15.
-- **PixelLab API access** — needed for the task-15 comparison; does an account exist?
 
 ## 8. Task index
 

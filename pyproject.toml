@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spriteforge"
+version = "0.1.0"
+description = "Prompt -> palette-coherent, game-ready pixel-art sprites"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "Pillow>=10",
+]
+
+[project.optional-dependencies]
+# Stage-1 generation (GPU boxes only; the CPU core installs without these)
+generate = [
+    "torch>=2.1",
+    "diffusers>=0.27",
+    "transformers>=4.38",
+    "accelerate>=0.27",
+    "peft>=0.9",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+spriteforge = "spriteforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
