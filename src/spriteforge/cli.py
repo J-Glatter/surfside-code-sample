@@ -129,33 +129,40 @@ def _cmd_curate(a: argparse.Namespace) -> None:
 
 
 def _cmd_skeleton(a: argparse.Namespace) -> None:
-    from .animate.skeleton import ACTIONS, DEFAULT_FRAMES, render_openpose, save_poses
+    from .animate.pipeline import rig_for
+    from .animate.skeleton import save_poses
 
+    actions, default_frames, render = rig_for(a.body)
+    if a.action not in actions:
+        raise SystemExit(f"skeleton: {a.body} has no action {a.action!r} "
+                         f"(have: {', '.join(actions)})")
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
-    poses = ACTIONS[a.action](a.frames or DEFAULT_FRAMES[a.action])
+    poses = actions[a.action](a.frames or default_frames[a.action])
     for k, pose in enumerate(poses):
-        render_openpose(pose, size=a.size).save(out / f"{a.action}_{k:02d}.png")
+        render(pose, size=a.size).save(out / f"{a.action}_{k:02d}.png")
     save_poses(poses, out / f"{a.action}.json")
-    print(f"wrote {len(poses)} conditioning frames + {a.action}.json to {out}")
+    print(f"wrote {len(poses)} {a.body} conditioning frames + {a.action}.json to {out}")
 
 
 def _cmd_animate(a: argparse.Namespace) -> None:
     # Lazy: needs the [animate] extra — GPU boxes only.
-    from .animate.frames import build_animation_pipe
+    from .animate.frames import CONTROLNET_BY_BODY, build_animation_pipe
     from .animate.pipeline import animate_action
 
     fp16 = True if a.fp16 else False if a.fp32 else None
-    pipe = build_animation_pipe(character_lora=a.character_lora, fp16=fp16)
+    controlnet = a.controlnet or CONTROLNET_BY_BODY[a.body]
+    pipe = build_animation_pipe(character_lora=a.character_lora, fp16=fp16,
+                                controlnet_model=controlnet)
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
-    print(f"animating {a.action}: {a.frames or 'default'} frames x "
-          f"{a.candidates} candidates...")
+    print(f"animating {a.body} {a.action}: {a.frames or 'default'} frames x "
+          f"{a.candidates} candidates (controlnet: {controlnet})...")
     locked, selection = animate_action(
         pipe, a.action, a.prompt,
         size=a.size, colors=a.colors, palette=_load_palette(a),
         frames=a.frames, n_candidates=a.candidates, seed=a.seed,
-        raw_dir=a.raw_dir,
+        raw_dir=a.raw_dir, body=a.body,
     )
     for k, frame in enumerate(locked):
         frame.save(out / f"{a.action}_{k:02d}.png")
@@ -333,7 +340,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_skel = sub.add_parser(
         "skeleton", help="dump pose-conditioning images for an action (CPU)")
-    p_skel.add_argument("--action", choices=("walk", "run", "jump"), required=True)
+    p_skel.add_argument("--action", required=True,
+                        help="humanoid: walk/run/jump; quadruped: walk/trot/gallop/jump")
+    p_skel.add_argument("--body", choices=("humanoid", "quadruped"),
+                        default="humanoid")
     p_skel.add_argument("-o", "--output", default="skeletons")
     p_skel.add_argument("--frames", type=int, default=None)
     p_skel.add_argument("--size", type=int, default=512)
@@ -342,7 +352,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_anim = sub.add_parser(
         "animate", help="generate an animated action via pose control + selection")
     p_anim.add_argument("prompt", help="character description")
-    p_anim.add_argument("--action", choices=("walk", "run", "jump"), required=True)
+    p_anim.add_argument("--action", required=True,
+                        help="humanoid: walk/run/jump; quadruped: walk/trot/gallop/jump")
+    p_anim.add_argument("--body", choices=("humanoid", "quadruped"),
+                        default="humanoid")
+    p_anim.add_argument("--controlnet", default=None,
+                        help="override the ControlNet repo (default per body)")
     p_anim.add_argument("-o", "--output", default="frames")
     p_anim.add_argument("--frames", type=int, default=None,
                         help="frame count (default: per-action canonical)")

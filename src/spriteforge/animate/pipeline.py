@@ -17,11 +17,23 @@ from ..palette import Palette
 from ..pixelize import DEFAULT_COLORS, pixelize
 from .frames import generate_candidates
 from .selector import Selection, select_frames
-from .skeleton import ACTIONS, DEFAULT_FRAMES, render_openpose
 
 # 100 candidates/frame is the handover's working number; generation is a
 # fraction of a penny each, selection is what buys the smoothness.
 DEFAULT_CANDIDATES = 100
+
+
+def rig_for(body: str):
+    """(actions, default_frames, renderer) for a body type."""
+    if body == "humanoid":
+        from . import skeleton as rig
+
+        return rig.ACTIONS, rig.DEFAULT_FRAMES, rig.render_openpose
+    if body == "quadruped":
+        from . import skeleton_quadruped as rig
+
+        return rig.ACTIONS, rig.DEFAULT_FRAMES, rig.render_quadruped
+    raise ValueError(f"unknown body type {body!r} (have: humanoid, quadruped)")
 
 
 def animate_action(
@@ -39,18 +51,23 @@ def animate_action(
     seed: int = 0,
     use_lora: bool = True,
     raw_dir: str | Path | None = None,
+    body: str = "humanoid",
 ) -> tuple[list[Image.Image], Selection]:
     """Generate one animated action. Returns (locked pixelized frames, selection).
 
     Deterministic: candidate seeds are seed + frame_index * 10_000 + candidate_index.
+    `body` selects the rig: humanoid (COCO-18) or quadruped (AP-10K) — pair the
+    pipe with the matching ControlNet (frames.CONTROLNET_BY_BODY).
     """
-    if action not in ACTIONS:
-        raise ValueError(f"unknown action {action!r} (have: {', '.join(ACTIONS)})")
-    poses = ACTIONS[action](frames or DEFAULT_FRAMES[action])
+    actions, default_frames, render = rig_for(body)
+    if action not in actions:
+        raise ValueError(
+            f"unknown action {action!r} for {body} (have: {', '.join(actions)})")
+    poses = actions[action](frames or default_frames[action])
 
     candidates_px: list[list[np.ndarray]] = []
     for k, pose in enumerate(poses):
-        control = render_openpose(pose)
+        control = render(pose)
         raws = generate_candidates(
             pipe, control, prompt,
             n=n_candidates, steps=steps, guidance=guidance,

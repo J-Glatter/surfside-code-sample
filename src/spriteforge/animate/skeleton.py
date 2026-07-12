@@ -67,8 +67,8 @@ class Pose:
 
     keypoints: dict[str, tuple[float, float] | None]
 
-    def as_list(self) -> list[tuple[float, float] | None]:
-        return [self.keypoints.get(j) for j in JOINTS]
+    def as_list(self, joints: list[str] | None = None) -> list[tuple[float, float] | None]:
+        return [self.keypoints.get(j) for j in (joints or JOINTS)]
 
 
 def _polar(origin: tuple[float, float], angle: float, length: float) -> tuple[float, float]:
@@ -191,24 +191,34 @@ DEFAULT_FRAMES = {"walk": 8, "run": 8, "jump": 6}
 # ---- rendering & I/O -------------------------------------------------------------
 
 def render_openpose(pose: Pose, size: int = 512, line_width: int = 8,
-                    joint_radius: int = 5) -> Image.Image:
-    """Draw the pose as an OpenPose-style conditioning image (black background)."""
+                    joint_radius: int = 5,
+                    joints: list[str] | None = None,
+                    limbs: list[tuple[int, int]] | None = None,
+                    colors: list[tuple[int, int, int]] | None = None) -> Image.Image:
+    """Draw a pose as an OpenPose-style conditioning image (black background).
+
+    Defaults to the humanoid COCO-18 topology; pass joints/limbs/colors for
+    other rigs (see skeleton_quadruped).
+    """
+    _limbs = limbs if limbs is not None else _LIMBS
+    _colors = colors if colors is not None else _COLORS
     img = Image.new("RGB", (size, size), (0, 0, 0))
     draw = ImageDraw.Draw(img)
-    pts = [None if p is None else (p[0] * size, p[1] * size) for p in pose.as_list()]
-    for (a, b), color in zip(_LIMBS, _COLORS, strict=False):
+    pts = [None if p is None else (p[0] * size, p[1] * size)
+           for p in pose.as_list(joints)]
+    for (a, b), color in zip(_limbs, _colors, strict=False):
         if pts[a] is not None and pts[b] is not None:
             draw.line([pts[a], pts[b]], fill=color, width=line_width)
     for idx, pt in enumerate(pts):
         if pt is not None:
-            color = _COLORS[idx % len(_COLORS)]
+            color = _colors[idx % len(_colors)]
             draw.ellipse([pt[0] - joint_radius, pt[1] - joint_radius,
                           pt[0] + joint_radius, pt[1] + joint_radius], fill=color)
     return img
 
 
 def save_poses(poses: list[Pose], path: str | Path) -> None:
-    data = [{j: list(p.keypoints[j]) if p.keypoints.get(j) else None for j in JOINTS}
+    data = [{j: list(pt) if pt else None for j, pt in p.keypoints.items()}
             for p in poses]
     Path(path).write_text(json.dumps(data, indent=2) + "\n")
 

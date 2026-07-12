@@ -48,8 +48,10 @@ Workstreams:
   truly static objects.
 - simple_creature: limbless creatures animated by procedural squash & stretch
   (slimes, blobs, ghosts, coins, floating orbs). actions from: bounce, idle.
-- limbed_character: anything with arms/legs needing pose-driven animation
-  (people, knights, goblins, most monsters). actions from: walk, run, jump.
+- limbed_character: anything with limbs needing pose-driven animation. Set
+  body to "humanoid" (people, knights, goblins, bipedal monsters — actions
+  from: walk, run, jump) or "quadruped" (wolves, horses, deer, dragons,
+  four-legged beasts — actions from: walk, trot, gallop, jump).
 - environment_tile: ground/wall textures that must tile seamlessly
   (grass, cobblestone, water, sand).
 
@@ -72,12 +74,15 @@ class Plan:
     size: int = 256
     colors: int = 16
     actions: list[str] = field(default_factory=list)
+    body: str = "humanoid"     # rig for limbed_character: humanoid | quadruped
     reasoning: str = ""
     source: str = "heuristic"  # which decider produced this plan
 
     def __post_init__(self):
         if self.workstream not in WORKSTREAMS:
             raise ValueError(f"unknown workstream {self.workstream!r}")
+        if self.body not in ("humanoid", "quadruped"):
+            raise ValueError(f"unknown body type {self.body!r}")
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2)
@@ -93,6 +98,7 @@ _DEFAULT_ACTIONS = {
     "simple_creature": ["bounce", "idle"],
     "limbed_character": ["walk", "run", "jump"],
 }
+_QUADRUPED_ACTIONS = ["walk", "gallop", "jump"]
 
 # ---------------------------------------------------------------------------
 # Deciders
@@ -104,7 +110,10 @@ _BLOB_WORDS = {"slime", "blob", "ghost", "jelly", "orb", "coin", "gem", "crystal
                "pickup", "bubble", "spirit", "wisp", "eyeball"}
 _LIMBED_WORDS = {"knight", "wizard", "warrior", "archer", "hero", "character",
                  "person", "man", "woman", "goblin", "skeleton", "zombie", "orc",
-                 "villager", "monster", "dragon", "wolf", "soldier", "npc", "boss"}
+                 "villager", "monster", "soldier", "npc", "boss"}
+_QUADRUPED_WORDS = {"wolf", "dog", "hound", "cat", "horse", "pony", "deer",
+                    "stag", "fox", "boar", "bear", "lion", "tiger", "dragon",
+                    "cow", "sheep", "goat", "pig", "rat", "beast"}
 _SWAY_WORDS = {"tree", "flag", "banner", "plant", "flower", "bush", "sapling",
                "palm", "reed", "vine", "lantern", "sign", "sway", "swaying",
                "wind", "waving", "fluttering"}
@@ -114,12 +123,17 @@ def heuristic_decider(prompt: str) -> Plan:
     """Deterministic keyword routing — the offline/CI/API-down fallback."""
     words = set(re.findall(r"[a-z]+", prompt.lower()))
 
+    body = "humanoid"
     if words & _TILE_WORDS:
         workstream, size = "environment_tile", 128
         enriched = f"{prompt}, top-down view, flat texture"
     elif words & _BLOB_WORDS:
         workstream, size = "simple_creature", 256
         enriched = f"{prompt}, full body, centered, plain background"
+    elif words & _QUADRUPED_WORDS:
+        workstream, size = "limbed_character", 256
+        body = "quadruped"
+        enriched = f"{prompt}, full body, side view, centered, plain background"
     elif words & _LIMBED_WORDS:
         workstream, size = "limbed_character", 256
         enriched = f"{prompt}, full body, centered, plain background"
@@ -127,7 +141,10 @@ def heuristic_decider(prompt: str) -> Plan:
         workstream, size = "static_prop", 256
         enriched = f"{prompt}, centered, plain background"
 
-    actions = list(_DEFAULT_ACTIONS.get(workstream, []))
+    if body == "quadruped":
+        actions = list(_QUADRUPED_ACTIONS)
+    else:
+        actions = list(_DEFAULT_ACTIONS.get(workstream, []))
     if workstream == "static_prop" and words & _SWAY_WORDS:
         actions = ["sway"]
 
@@ -136,6 +153,7 @@ def heuristic_decider(prompt: str) -> Plan:
         enriched_prompt=enriched,
         size=size,
         actions=actions,
+        body=body,
         reasoning="keyword heuristic",
         source="heuristic",
     )
@@ -157,6 +175,7 @@ def llm_decider(prompt: str, model: str = DIRECTOR_MODEL, client=None) -> Plan:
         size: int = 256
         colors: int = 16
         actions: list[str] = Field(default_factory=list)
+        body: Literal["humanoid", "quadruped"] = "humanoid"
         reasoning: str = ""
 
     client = client or anthropic.Anthropic()
@@ -168,14 +187,17 @@ def llm_decider(prompt: str, model: str = DIRECTOR_MODEL, client=None) -> Plan:
         output_format=PlanModel,
     )
     p = response.parsed_output
-    actions = p.actions or list(_DEFAULT_ACTIONS.get(p.workstream, []))
+    if not (actions := p.actions):
+        actions = (_QUADRUPED_ACTIONS if p.body == "quadruped"
+                   else _DEFAULT_ACTIONS.get(p.workstream, []))
     return Plan(
         workstream=p.workstream,
         enriched_prompt=p.enriched_prompt,
         negative_additions=p.negative_additions,
         size=p.size,
         colors=p.colors,
-        actions=actions,
+        actions=list(actions),
+        body=p.body,
         reasoning=p.reasoning,
         source=f"llm:{model}",
     )
@@ -208,7 +230,8 @@ Hero candidates written to {out_dir}. Next steps for the character ratchet
   2. spriteforge curate {out_dir}/round1 --hero {best} -o {out_dir}/keep --keep 10
   3. spriteforge dataset prep {out_dir}/keep/*.png -o {out_dir}/lora --trigger <token>
   4. train per {out_dir}/lora/NOTES.md, then animate:
-     spriteforge animate "{prompt}, <token>" --action walk -o {out_dir}/frames \\
+     spriteforge animate "{prompt}, <token>" --action walk{body_flag} \\
+         -o {out_dir}/frames \\
          --character-lora {out_dir}/lora/output/<token>.safetensors"""
 
 HERO_CANDIDATES = 4
@@ -270,9 +293,10 @@ def execute_plan(
             pixelize(raw, size=plan.size, colors=plan.colors, palette=palette).save(path)
             raw.save(out_dir / f"hero_{i:02d}_raw.png")  # refine wants the raw render
             heroes.append(path)
+        body_flag = " --body quadruped" if plan.body == "quadruped" else ""
         next_steps = _RATCHET_NEXT_STEPS.format(
             out_dir=out_dir, best=out_dir / "hero_00_raw.png",
-            prompt=plan.enriched_prompt)
+            prompt=plan.enriched_prompt, body_flag=body_flag)
         (out_dir / "NEXT_STEPS.md").write_text(next_steps + "\n")
         results.update(heroes=heroes, next_steps=out_dir / "NEXT_STEPS.md")
         return results

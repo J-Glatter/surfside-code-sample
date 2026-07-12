@@ -50,6 +50,30 @@ def test_heuristic_defaults():
     assert heuristic_decider("a chest").actions == []
 
 
+def test_heuristic_quadruped_routing():
+    for prompt in ("a grey wolf", "a war horse", "a young deer"):
+        plan = heuristic_decider(prompt)
+        assert plan.workstream == "limbed_character", prompt
+        assert plan.body == "quadruped", prompt
+        assert plan.actions == ["walk", "gallop", "jump"], prompt
+    # bipeds keep the humanoid rig
+    knight = heuristic_decider("a knight")
+    assert knight.body == "humanoid"
+    assert knight.actions == ["walk", "run", "jump"]
+
+
+def test_plan_rejects_unknown_body():
+    with pytest.raises(ValueError):
+        Plan(workstream="limbed_character", enriched_prompt="x", body="centipede")
+
+
+def test_quadruped_next_steps_carry_body_flag(exec_env, tmp_path):
+    plan = Plan(workstream="limbed_character", enriched_prompt="a wolf",
+                size=32, body="quadruped")
+    execute_plan(plan, tmp_path, pipe=exec_env)
+    assert "--body quadruped" in (tmp_path / "NEXT_STEPS.md").read_text()
+
+
 def test_heuristic_sway_props():
     for prompt in ("a tree swaying in the wind", "an old oak tree",
                    "a tattered flag on a pole"):
@@ -94,7 +118,8 @@ def test_llm_decider_wiring():
         workstream="simple_creature",
         enriched_prompt="a slime, full body, centered",
         negative_additions="multiple creatures",
-        size=256, colors=16, actions=[], reasoning="limbless blob",
+        size=256, colors=16, actions=[], body="humanoid",
+        reasoning="limbless blob",
     )
     client = MagicMock()
     client.messages.parse.return_value = types.SimpleNamespace(parsed_output=parsed)

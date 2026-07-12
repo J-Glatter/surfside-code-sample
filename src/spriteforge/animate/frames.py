@@ -19,6 +19,15 @@ from ..generate import (
 )
 
 CONTROLNET_OPENPOSE = "lllyasviel/sd-controlnet-openpose"
+# Community animal-openpose ControlNet (AP-10K rig) for quadrupeds. UNVERIFIED:
+# confirm the repo id and output quality at Checkpoint D before relying on it —
+# swap this constant (or pass --controlnet) if a better model lands.
+CONTROLNET_ANIMAL_OPENPOSE = "crishhh/animal_openpose"
+
+CONTROLNET_BY_BODY = {
+    "humanoid": CONTROLNET_OPENPOSE,
+    "quadruped": CONTROLNET_ANIMAL_OPENPOSE,
+}
 
 
 def build_animation_pipe(
@@ -26,8 +35,9 @@ def build_animation_pipe(
     fp16: bool | None = None,
     use_style_lora: bool = True,
     device: str | None = None,
+    controlnet_model: str = CONTROLNET_OPENPOSE,
 ):
-    """SD 1.5 + openpose ControlNet, with style/character LoRAs stacked."""
+    """SD 1.5 + a pose ControlNet, with style/character LoRAs stacked."""
     import torch
     from diffusers import (
         ControlNetModel,
@@ -42,7 +52,7 @@ def build_animation_pipe(
         fp16 = default_fp16(device)
     dtype = torch.float16 if fp16 else torch.float32
 
-    controlnet = ControlNetModel.from_pretrained(CONTROLNET_OPENPOSE, torch_dtype=dtype)
+    controlnet = ControlNetModel.from_pretrained(controlnet_model, torch_dtype=dtype)
     pipe = StableDiffusionControlNetPipeline.from_pretrained(
         BASE_MODEL, controlnet=controlnet, torch_dtype=dtype, safety_checker=None
     )
