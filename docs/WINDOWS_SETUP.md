@@ -38,11 +38,17 @@ wakeonlan AA:BB:CC:DD:EE:FF        # the MAC from above
 ```
 
 **Waking it from outside the LAN:** a magic packet must originate *inside* the
-LAN, so you need one always-on device there. Any of: a Raspberry Pi / spare
-router with SSH (`ssh pi wakeonlan <MAC>` over Tailscale), a router with a
-built-in WoL page, or the blunt fallback — a smart plug + the BIOS
-*power-on-after-power-loss* setting, so cutting and restoring power boots the
-box. Test the full off → wake → SSH loop before relying on it.
+LAN, so you need one always-on device there. Options, cheapest-effort first:
+a router with SSH/OpenWrt or a built-in WoL page (zero extra hardware); a
+**Pi Zero 2 W** (~$15, sub-watt idle — Raspberry Pi OS Lite +
+`apt install wakeonlan` + `tailscale up`, then `ssh pi "wakeonlan <MAC>"`
+from anywhere; the original Zero W also works, just slower at Tailscale, and
+the non-W Zero has no networking at all); or the blunt fallback — a smart plug
++ the BIOS *power-on-after-power-loss* setting, so cutting and restoring power
+boots the box. Gotcha for any Wi-Fi sender: it must join the **main** LAN —
+guest SSIDs (AP isolation) and separate IoT VLANs silently swallow the
+broadcast. The sender may be wireless; only the target needs Ethernet. Test
+the full off → wake → SSH loop before relying on it.
 
 ## 2. Remote access
 
