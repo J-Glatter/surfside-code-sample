@@ -34,7 +34,7 @@ spriteforge make "a small slime monster" -o slime --palette game.json
 #    ratchet next-steps, since LoRA training runs in kohya)
 
 # Convert any image into clean pixel art (pure CPU)
-spriteforge pixelize input.png -o out.png --size 256 --colors 16 --preview 4
+spriteforge pixelize input.png -o out.png --size 64 --colors 16 --preview 4
 
 # Prompt -> sprite (needs [generate]; first run downloads ~4 GB of model weights)
 spriteforge generate "a brave knight in green armour, full body" -o knight.png --seed 7

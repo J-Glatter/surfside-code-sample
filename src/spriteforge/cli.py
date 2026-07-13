@@ -2,7 +2,7 @@
 
 Subcommands (Milestone A set — `palette` lands in Milestone B):
 
-    spriteforge pixelize input.png -o out.png --size 256 --colors 16 --preview 4
+    spriteforge pixelize input.png -o out.png --size 64 --colors 16 --preview 4
     spriteforge generate "a brave knight in green armour, full body" -o knight.png
 
 Flag names preserved from the original Phase-0 scripts (reference/*.py).

@@ -60,8 +60,9 @@ composition hints ("full body, centered, plain background" for characters and
 creatures; "top-down view, flat texture" for tiles). Do not add style words
 like "pixel art" — a style LoRA handles that.
 negative_additions: extra negative-prompt terms this asset needs, or "".
-size: sprite longest side in px — 256 for characters/creatures/props unless
-the request implies tiny or huge; 128 for tiles.
+size: sprite longest side in px — 64 for everything (characters, creatures,
+props, tiles all share the game's 64px logical grid; engines upscale for
+display) unless the request implies tiny or huge.
 colors: palette size, default 16.
 reasoning: one sentence on the routing choice."""
 
@@ -71,7 +72,7 @@ class Plan:
     workstream: str
     enriched_prompt: str
     negative_additions: str = ""
-    size: int = 256
+    size: int = 64
     colors: int = 16
     actions: list[str] = field(default_factory=list)
     body: str = "humanoid"     # rig for limbed_character: humanoid | quadruped
@@ -124,21 +125,22 @@ def heuristic_decider(prompt: str) -> Plan:
     words = set(re.findall(r"[a-z]+", prompt.lower()))
 
     body = "humanoid"
+    size = 64                  # one logical grid for everything (PLAN.md §6)
     if words & _TILE_WORDS:
-        workstream, size = "environment_tile", 128
+        workstream = "environment_tile"
         enriched = f"{prompt}, top-down view, flat texture"
     elif words & _BLOB_WORDS:
-        workstream, size = "simple_creature", 256
+        workstream = "simple_creature"
         enriched = f"{prompt}, full body, centered, plain background"
     elif words & _QUADRUPED_WORDS:
-        workstream, size = "limbed_character", 256
+        workstream = "limbed_character"
         body = "quadruped"
         enriched = f"{prompt}, full body, side view, centered, plain background"
     elif words & _LIMBED_WORDS:
-        workstream, size = "limbed_character", 256
+        workstream = "limbed_character"
         enriched = f"{prompt}, full body, centered, plain background"
     else:
-        workstream, size = "static_prop", 256
+        workstream = "static_prop"
         enriched = f"{prompt}, centered, plain background"
 
     if body == "quadruped":
@@ -172,7 +174,7 @@ def llm_decider(prompt: str, model: str = DIRECTOR_MODEL, client=None) -> Plan:
         ]
         enriched_prompt: str
         negative_additions: str = ""
-        size: int = 256
+        size: int = 64
         colors: int = 16
         actions: list[str] = Field(default_factory=list)
         body: Literal["humanoid", "quadruped"] = "humanoid"

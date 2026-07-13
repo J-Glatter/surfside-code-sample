@@ -11,8 +11,9 @@ the part that actually makes it pixel art:
 
 Pure CPU / numpy + Pillow. No GPU needed, runs anywhere.
 
-Algorithm ported unchanged from reference/pixelize.py (proven Phase-0 code);
-default target size raised 64 -> 256 per the project's grid decision (PLAN.md §6).
+Algorithm ported unchanged from reference/pixelize.py (proven Phase-0 code).
+Default grid: 64px logical, displayed upscaled — the classic look (PLAN.md §6;
+briefly 256 before the chunky-vs-smooth comparison settled it).
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from .kmeans import kmeans
 if TYPE_CHECKING:
     from .palette import Palette
 
-DEFAULT_SIZE = 256
+DEFAULT_SIZE = 64
 DEFAULT_COLORS = 16
 
 

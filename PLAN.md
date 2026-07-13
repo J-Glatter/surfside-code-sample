@@ -185,11 +185,13 @@ all of SaaS/Phase 5 (§16–17 — gated on the task-15 experiment).
 6. **Selector continuity scored in pixelized space** (proposed — cheap, artefact-true).
 7. **Hand-authored canonical skeletons first** for walk/run/jump.
 8. **Milestones gate on user-run GPU checkpoints** — nothing is "done" on mocks alone.
-9. **Default sprite grid: 256px** (user decision, was 64). Consequences: 512→256 is
-   only a 2× downscale, so the "small sprites hide wobble" effect (§12) largely
-   disappears — the animation milestone leans harder on the selector — and the SDXL
-   revisit (1024 native → 4× headroom) rises in priority. 16 colours may feel tight
-   at 256px; judge with real outputs at Checkpoint A/B. Size stays a parameter.
+9. **Default sprite grid: 64px logical, displayed upscaled** (user decision,
+   revised from an earlier 256 after a side-by-side chunky-vs-smooth comparison).
+   One grid for every workstream — characters, creatures, props, and tiles.
+   Consequences: the 8× downscale from SD's 512 render restores the handover's
+   "small sprites hide wobble" advantage (§12) in full, the SDXL revisit loses
+   urgency, and 16 colours is comfortable. 256 stays a per-asset override
+   (`--size` / edited plan) for hero portraits and the like.
 10. **PixelLab comparison deferred** — no API account yet; revisit at Milestone D
    (task 15 needs it or a substitute baseline).
 

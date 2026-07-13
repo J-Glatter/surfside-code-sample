@@ -25,9 +25,9 @@ spriteforge generate "a small slime monster" -o slime2.png --seed 3 --palette ga
 spriteforge generate "a stone watchtower" -o tower2.png --seed 11 --palette game.json
 ```
 
-**Pass:** the three `*2.png` sprites read as one game. Also judge whether 16
-colours is enough at 256px — if it looks banded/posterised, try `--colors 32`
-and re-extract.
+**Pass:** the three `*2.png` sprites read as one game. The default grid is 64px
+logical (view with `--preview 4`); also judge whether 16 colours suits the art
+direction — try `--colors 32` and re-extract if shading feels cramped.
 
 ## Checkpoint C — style LoRA + the character ratchet (3080 box)
 

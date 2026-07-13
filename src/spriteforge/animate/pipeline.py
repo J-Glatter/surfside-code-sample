@@ -14,7 +14,7 @@ import numpy as np
 from PIL import Image
 
 from ..palette import Palette
-from ..pixelize import DEFAULT_COLORS, pixelize
+from ..pixelize import DEFAULT_COLORS, DEFAULT_SIZE, pixelize
 from .frames import generate_candidates
 from .selector import Selection, select_frames
 
@@ -40,7 +40,7 @@ def animate_action(
     pipe,
     action: str,
     prompt: str,
-    size: int = 256,
+    size: int = DEFAULT_SIZE,
     colors: int = DEFAULT_COLORS,
     palette: Palette | None = None,
     frames: int | None = None,

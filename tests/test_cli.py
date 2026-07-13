@@ -24,14 +24,14 @@ def test_pixelize_subcommand(tmp_path, gradient_scene):
     assert preview.size == (sprite.width * 4, sprite.height * 4)
 
 
-def test_pixelize_default_size_is_256(tmp_path, gradient_scene):
+def test_pixelize_default_size_is_64(tmp_path, gradient_scene):
     src = tmp_path / "in.png"
     out = tmp_path / "out.png"
     gradient_scene.save(src)
 
     main(["pixelize", str(src), "-o", str(out)])
 
-    assert max(Image.open(out).size) == 256
+    assert max(Image.open(out).size) == 64
 
 
 def test_pixelize_deterministic_across_runs(tmp_path, noise_image):

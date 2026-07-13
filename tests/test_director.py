@@ -44,7 +44,9 @@ def test_heuristic_routing(prompt, expected):
 
 
 def test_heuristic_defaults():
-    assert heuristic_decider("grass texture").size == 128
+    # one 64px logical grid for every workstream (PLAN.md §6)
+    assert heuristic_decider("grass texture").size == 64
+    assert heuristic_decider("a knight").size == 64
     assert heuristic_decider("a slime").actions == ["bounce", "idle"]
     assert heuristic_decider("a knight").actions == ["walk", "run", "jump"]
     assert heuristic_decider("a chest").actions == []
