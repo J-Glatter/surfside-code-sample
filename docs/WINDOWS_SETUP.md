@@ -50,6 +50,12 @@ guest SSIDs (AP isolation) and separate IoT VLANs silently swallow the
 broadcast. The sender may be wireless; only the target needs Ethernet. Test
 the full off → wake → SSH loop before relying on it.
 
+**Smart-plug safety:** the plug is a remote power *button*, not a kill
+switch — only cut its power after a clean OS shutdown (`ssh box "shutdown /s
+/t 30"`). Cutting power to a running box risks lost writes and corrupted jobs
+(and is catastrophic mid-BIOS/Windows-update). Use a plug rated well above
+the box's ~500W peak draw.
+
 ## 2. Remote access
 
 **OpenSSH server** (built into Windows, one time, admin PowerShell):
