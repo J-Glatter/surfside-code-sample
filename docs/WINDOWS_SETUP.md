@@ -56,6 +56,57 @@ switch — only cut its power after a clean OS shutdown (`ssh box "shutdown /s
 (and is catastrophic mid-BIOS/Windows-update). Use a plug rated well above
 the box's ~500W peak draw.
 
+### 1b. Recommended upgrade: a wired Pi as the queue midpoint
+
+A Pi with Ethernet (old 3B+/4/5, or Zero 2 W + USB-Ethernet adapter) on the
+same switch as the box can host the **jobs folder itself** and auto-wake the
+PC when work arrives. The queue is then always-on: drop jobs from anywhere
+while the PC is off; dropping a file *is* the on-switch; collect results later
+regardless of the PC's power state. No spriteforge changes — the worker just
+points at the Pi's share.
+
+On the Pi (Raspberry Pi OS Lite):
+
+```bash
+sudo apt install samba wakeonlan inotify-tools
+sudo mkdir -p /srv/jobs && sudo chown pi:pi /srv/jobs
+# /etc/samba/smb.conf — append, then: sudo systemctl restart smbd
+#   [jobs]
+#   path = /srv/jobs
+#   writeable = yes
+#   valid users = pi
+sudo smbpasswd -a pi
+tailscale up   # if using Tailscale for remote drops
+```
+
+The watcher — `/home/pi/wake-on-job.sh` (fill in the PC's MAC + IP):
+
+```bash
+#!/usr/bin/env bash
+JOBS=/srv/jobs PC_MAC=AA:BB:CC:DD:EE:FF PC_IP=192.168.1.50
+inotifywait -m -e create -e moved_to --format '%f' "$JOBS" | while read -r f; do
+  case "$f" in *.json|*.txt)
+    ping -c1 -W1 "$PC_IP" >/dev/null 2>&1 || wakeonlan "$PC_MAC" ;;
+  esac
+done
+```
+
+Run it as a service: `chmod +x` the script, then a systemd unit with
+`ExecStart=/home/pi/wake-on-job.sh`, `Restart=always`, `WantedBy=multi-user.target`
+(`sudo systemctl enable --now wake-on-job`).
+
+On the Windows box, point the worker at the share instead of a local folder —
+UNC paths work directly, no drive mapping needed:
+
+```powershell
+spriteforge worker \\pi\jobs --palette C:\spriteforge\game.json
+```
+
+(Store the share credentials once with `cmdkey /add:pi /user:pi /pass:...` so
+the scheduled task can reach it.) Flow: Mac drops `wolf.json` on the Pi →
+watcher wakes the PC → worker boots, drains the queue into `done/` on the Pi →
+optionally shuts itself down. The PC's power state stops mattering to you.
+
 ## 2. Remote access
 
 **OpenSSH server** (built into Windows, one time, admin PowerShell):
