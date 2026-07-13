@@ -107,6 +107,17 @@ the scheduled task can reach it.) Flow: Mac drops `wolf.json` on the Pi →
 watcher wakes the PC → worker boots, drains the queue into `done/` on the Pi →
 optionally shuts itself down. The PC's power state stops mattering to you.
 
+**Direct-link variant (PC can't be cabled to the router):** Pi on Wi-Fi, one
+Ethernet cable straight from Pi to PC (any cable — gigabit NICs auto-cross).
+Static IPs on the link (Pi `10.0.0.1/24`, PC `10.0.0.2/24`); the PC keeps its
+own Wi-Fi for internet; the cable carries only wake packets and the jobs share
+(`spriteforge worker \\10.0.0.1\jobs`, now at gigabit). One script change: on
+a multi-homed Pi, `wakeonlan` broadcasts via the default route (Wi-Fi), so the
+watcher must use the interface-specific `sudo etherwake -i eth0 <MAC>`
+(`apt install etherwake`) instead. Avoid NATing the PC's internet through the
+Pi unless the PC truly has no Wi-Fi — it works but funnels every download
+through the Pi's radio.
+
 ## 2. Remote access
 
 **OpenSSH server** (built into Windows, one time, admin PowerShell):
