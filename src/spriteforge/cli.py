@@ -225,6 +225,14 @@ def _cmd_make(a: argparse.Namespace) -> None:
         print(f"  {key}: {value}")
 
 
+def _cmd_worker(a: argparse.Namespace) -> None:
+    # Lazy: real jobs need the [generate] extra — this runs on the GPU box.
+    from .worker import run_worker
+
+    run_worker(a.jobs_dir, poll=a.poll, palette=_load_palette(a),
+               offline=a.offline, once=a.once)
+
+
 def _cmd_preview(a: argparse.Namespace) -> None:
     from .preview import gif_from_dir
 
@@ -415,6 +423,20 @@ def build_parser() -> argparse.ArgumentParser:
     make_fp.add_argument("--fp16", action="store_true")
     make_fp.add_argument("--fp32", action="store_true")
     p_make.set_defaults(func=_cmd_make)
+
+    p_work = sub.add_parser(
+        "worker", help="watch a jobs folder and execute plans (the GPU box's "
+                       "remote-trigger mode)")
+    p_work.add_argument("jobs_dir", help="folder to watch (e.g. an SMB share)")
+    p_work.add_argument("--poll", type=float, default=2.0,
+                        help="seconds between folder scans")
+    p_work.add_argument("--palette", default=None, metavar="FILE",
+                        help="locked palette applied to every job")
+    p_work.add_argument("--offline", action="store_true",
+                        help="plan .txt jobs with heuristics, never the LLM")
+    p_work.add_argument("--once", action="store_true",
+                        help="process what's pending, then exit")
+    p_work.set_defaults(func=_cmd_worker)
 
     return parser
 

@@ -275,10 +275,13 @@ def execute_plan(
     results: dict = {"workstream": plan.workstream}
 
     if plan.workstream == "environment_tile":
-        from .tiling import enable_tiling, seam_error, tile_preview
+        from .tiling import disable_tiling, enable_tiling, seam_error, tile_preview
 
         enable_tiling(pipe)
-        raw = _generate()
+        try:
+            raw = _generate()
+        finally:
+            disable_tiling(pipe)  # the pipe may be reused for non-tile jobs
         sprite = pixelize(raw, size=plan.size, colors=plan.colors, palette=palette)
         sprite.save(out_dir / "tile.png")
         tile_preview(sprite, 3).save(out_dir / "tile_grid.png")

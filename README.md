@@ -59,9 +59,17 @@ spriteforge preview frames/walk -o walk.gif --fps 10 --scale 4     # judge it at
 spriteforge sheet walk=frames/walk -o knight_sheet.png             # + JSON sidecar
 ```
 
+```bash
+# Remote-trigger mode: the GPU box watches a shared folder for job files
+spriteforge worker C:\sprite-jobs --palette game.json
+#   drop wolf.json (a plan) or cobble.txt (a prompt) in; collect done/<name>/
+```
+
 Device selection is automatic (CUDA → MPS → CPU) with fp16 on CUDA and fp32 on
 MPS; override with `--fp16` / `--fp32`. GPU validation runbook:
-[`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md).
+[`docs/CHECKPOINTS.md`](docs/CHECKPOINTS.md) · Windows box as a wake-on-demand
+render worker (WoL, SSH, jobs share, autostart):
+[`docs/WINDOWS_SETUP.md`](docs/WINDOWS_SETUP.md).
 
 ## How it works
 
