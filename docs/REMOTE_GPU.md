@@ -18,6 +18,17 @@ re-verify on the day.
 Any pod with an RTX 3090/4090, a **PyTorch template** (CUDA torch
 preinstalled), SSH access, and ≥30 GB disk (SD weights + kohya + outputs).
 
+**Sizing: don't pay for VRAM.** SD 1.5 uses ~4–6 GB inference, ~8–10 GB
+training — a 24 GB 4090 already has 3× headroom, so bigger-VRAM tiers
+(5090/48 GB-class) buy nothing here. A pricier card must be >(price ratio)×
+faster *on saturated GPU work* to win, and only LoRA training and
+selector-driven animation saturate; everything else is model-load/IO overhead
+that bills identically per second — favouring the cheaper card. Rough 4090
+times: sprite ~2–4 s compute (~15–30 s warm wall), refine round ~2 min, LoRA
+training 15–25 min, selector walk cycle (8×100 + ControlNet) ~20–30 min.
+Note **serverless ≠ pods**: serverless is the per-request endpoint shape
+(Phase 5); checkpoints want an SSH pod, which is also ~half the hourly rate.
+
 ## Launch → bootstrap (minutes)
 
 1. Create the pod (PyTorch template), note its SSH command.
