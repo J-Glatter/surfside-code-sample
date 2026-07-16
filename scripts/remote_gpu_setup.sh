@@ -13,6 +13,11 @@ REPO="${SPRITEFORGE_REPO:-https://github.com/J-Glatter/surfside-code-sample}"
 BASE="${SPRITEFORGE_BASE:-/workspace}"
 [ -d "$BASE" ] || BASE="$HOME"
 
+# Keep model weights on the persistent volume (/workspace on RunPod) so they
+# survive pod termination — the next pod skips the ~4 GB download entirely.
+export HF_HOME="$BASE/hf"
+grep -q "HF_HOME" ~/.bashrc 2>/dev/null || echo "export HF_HOME=$BASE/hf" >> ~/.bashrc
+
 echo "== GPU =="
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader || {
     echo "no GPU visible — wrong pod template?"; exit 1; }
