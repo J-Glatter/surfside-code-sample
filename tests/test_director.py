@@ -81,7 +81,7 @@ def test_plan_rejects_unknown_body():
 def test_quadruped_next_steps_carry_body_flag(exec_env, tmp_path):
     plan = Plan(workstream="limbed_character", enriched_prompt="a wolf",
                 size=32, body="quadruped")
-    execute_plan(plan, tmp_path, pipe=exec_env)
+    execute_plan(plan, tmp_path, pipe=exec_env, pick_fn=lambda imgs, p: 0)
     assert "--body quadruped" in (tmp_path / "NEXT_STEPS.md").read_text()
 
 
@@ -339,14 +339,29 @@ def test_execute_single_candidate_unchanged(exec_env, tmp_path):
 def test_execute_limbed_character_heroes_and_next_steps(exec_env, tmp_path):
     plan = Plan(workstream="limbed_character", enriched_prompt="a knight", size=32)
 
-    results = execute_plan(plan, tmp_path, seed=10, pipe=exec_env)
+    results = execute_plan(plan, tmp_path, seed=10, pipe=exec_env,
+                           pick_fn=lambda imgs, p: 2)
 
-    assert len(results["heroes"]) == 4
+    assert len(results["heroes"]) == 4          # default hero count
     # distinct seeds -> distinct hero renders
     colors = {Image.open(p).convert("RGB").getpixel((10, 10)) for p in results["heroes"]}
     assert len(colors) > 1
+    # a ready-to-use best-of-N sprite is promoted, and the ratchet steps point
+    # at the chosen hero's raw
+    assert results["chosen"] == 2
+    assert (tmp_path / "sprite.png").exists()
     steps = (tmp_path / "NEXT_STEPS.md").read_text()
     assert "spriteforge refine" in steps and "spriteforge curate" in steps
+    assert "hero_02_raw.png" in steps
+
+
+def test_execute_limbed_honors_candidates(exec_env, tmp_path):
+    plan = Plan(workstream="limbed_character", enriched_prompt="a knight", size=32)
+    results = execute_plan(plan, tmp_path, pipe=exec_env, candidates=6,
+                           pick=3)
+    assert len(results["heroes"]) == 6
+    assert results["chosen"] == 3
+    assert (tmp_path / "sprite.png").exists()
 
 
 def test_execute_environment_tile(exec_env, tmp_path):

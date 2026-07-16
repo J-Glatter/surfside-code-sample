@@ -388,20 +388,38 @@ def execute_plan(
         return subject
 
     if plan.workstream == "limbed_character":
-        heroes = []
-        for i in range(HERO_CANDIDATES):
+        # A single knight roll is a gamble (collages, baked scenes), so generate
+        # a batch and CLIP-pick the best into a ready-to-use sprite.png — same
+        # best-of-N deal as creatures/props. All heroes + raws are still kept for
+        # the LoRA ratchet. --candidates overrides the default hero count.
+        n = candidates if candidates > 1 else HERO_CANDIDATES
+        heroes, hero_sprites = [], []
+        for i in range(n):
             raw = _generate(seed_offset=i)
             path = out_dir / f"hero_{i:02d}.png"
-            pixelize(_isolated(raw), size=plan.size, colors=plan.colors,
-                     palette=palette).save(path)
+            hero_sprite = pixelize(_isolated(raw), size=plan.size,
+                                   colors=plan.colors, palette=palette)
+            hero_sprite.save(path)
             raw.save(out_dir / f"hero_{i:02d}_raw.png")  # refine wants the raw render
             heroes.append(path)
+            hero_sprites.append(hero_sprite)
+
+        if pick is not None:
+            winner = pick % n
+        else:
+            chooser = pick_fn or _pick_best_by_clip
+            winner = chooser(hero_sprites, plan.enriched_prompt) % n
+        hero_sprites[winner].save(out_dir / "sprite.png")
+        print(f"director: kept hero {winner} of {n} "
+              f"({'forced' if pick is not None else 'CLIP best-of-N'})")
+
         body_flag = " --body quadruped" if plan.body == "quadruped" else ""
         next_steps = _RATCHET_NEXT_STEPS.format(
-            out_dir=out_dir, best=out_dir / "hero_00_raw.png",
+            out_dir=out_dir, best=out_dir / f"hero_{winner:02d}_raw.png",
             prompt=plan.enriched_prompt, body_flag=body_flag)
         (out_dir / "NEXT_STEPS.md").write_text(next_steps + "\n")
-        results.update(heroes=heroes, next_steps=out_dir / "NEXT_STEPS.md")
+        results.update(heroes=heroes, chosen=winner, sprite=out_dir / "sprite.png",
+                       next_steps=out_dir / "NEXT_STEPS.md")
         return results
 
     # static_prop and simple_creature share the single-sprite start; both may
