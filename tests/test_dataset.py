@@ -39,7 +39,7 @@ def test_kohya_layout_and_captions(tmp_path):
     assert 'resolution = "1024,1024"' in config
     assert "stable-diffusion-xl-base-1.0" in config
     assert "no_half_vae = true" in config      # SDXL fp16 VAE would NaN latents
-    assert "xformers = true" in config
+    assert "sdpa = true" in config             # torch attention, no xformers dep
     assert str(train_dir.resolve()) in config
     notes = (out / "NOTES.md").read_text()
     assert "sks_hero" in notes

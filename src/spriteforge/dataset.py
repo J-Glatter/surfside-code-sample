@@ -27,9 +27,10 @@ from .generate import get_backend
 
 _KOHYA_CONFIG = """\
 # kohya_ss (sd-scripts {train_script}) template for a {backend} LoRA.
-# Speed levers per the project handover: xformers, fp16, modest steps. SDXL LoRA
-# training at 1024px wants ~16-24 GB VRAM (the A40 is comfortable; a 10 GB card
-# is not) — drop to --sd15 to train on smaller hardware. Verify paths first.
+# Speed levers: sdpa (torch built-in attention — no xformers install needed),
+# fp16, modest steps. SDXL LoRA training at 1024px wants ~16-24 GB VRAM (the A40
+# is comfortable; a 10 GB card is not) — drop to --sd15 for smaller hardware.
+# Verify paths first.
 
 pretrained_model_name_or_path = "{base_model}"
 train_data_dir = "{train_data_dir}"
@@ -55,7 +56,7 @@ mixed_precision = "fp16"
 # SDXL's VAE overflows to NaN in fp16; keep it fp32 so cache_latents doesn't
 # encode your whole dataset into garbage latents at step 0.
 no_half_vae = true
-xformers = true
+sdpa = true
 cache_latents = true
 gradient_checkpointing = true
 
