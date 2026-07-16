@@ -70,7 +70,7 @@ def _cmd_pixelize(a: argparse.Namespace) -> None:
     if a.isolate:
         from .isolate import isolate_subject
 
-        src, method = isolate_subject(src)
+        src, method = isolate_subject(src, trim_shadow=a.deshadow)
         if method is None:
             print("isolate: could not isolate — keeping the full image "
                   "(install the [isolate] extra for ML cutout)")
@@ -104,7 +104,7 @@ def _cmd_generate(a: argparse.Namespace) -> None:
     if a.isolate:
         from .isolate import isolate_subject
 
-        raw, method = isolate_subject(raw)
+        raw, method = isolate_subject(raw, trim_shadow=a.deshadow)
         if method is None:
             print("isolate: could not isolate — keeping the full render "
                   "(install the [isolate] extra for ML cutout)")
@@ -303,6 +303,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_pix.add_argument("--seed", type=int, default=0)
     p_pix.add_argument("--isolate", action="store_true",
                        help="strip a plain background to transparency first")
+    p_pix.add_argument("--deshadow", action="store_true",
+                       help="also strip a baked ground/cast shadow (for sprites "
+                            "that bounce; can eat grey detail on props)")
     p_pix.set_defaults(func=_cmd_pixelize)
 
     p_gen = sub.add_parser("generate", help="generate a pixel-art sprite from a prompt")
@@ -324,6 +327,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--isolate", action="store_true",
                        help="strip a plain background to transparency (prompt for "
                             "'isolated on a plain white background' too)")
+    p_gen.add_argument("--deshadow", action="store_true",
+                       help="also strip a baked ground/cast shadow (for sprites "
+                            "that bounce; can eat grey detail on props)")
     p_gen.add_argument("--sd15", action="store_true",
                        help="use the SD1.5 backend instead of the default SDXL")
     p_gen.set_defaults(func=_cmd_generate)

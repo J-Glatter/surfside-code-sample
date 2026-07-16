@@ -126,7 +126,7 @@ def isolate_subject(
     tolerance: float = DEFAULT_TOLERANCE,
     min_coverage: float = MIN_COVERAGE,
     max_coverage: float = MAX_COVERAGE,
-    trim_shadow: bool = True,
+    trim_shadow: bool = False,
 ) -> tuple[Image.Image, str | None]:
     """Return (RGBA image, method) — method is "flood", "rembg", or None.
 
@@ -134,8 +134,11 @@ def isolate_subject(
     touches the image border. Interior pixels of similar colour (eyes,
     highlights) are preserved — connectivity is what protects them.
 
-    When a subject is found, its baked-in ground/cast shadow is also stripped
-    (`trim_shadow`) so it animates cleanly — see strip_cast_shadow.
+    `trim_shadow` also strips a baked-in ground/cast shadow (strip_cast_shadow).
+    OFF by default: it can't tell a shadow from a legitimately grey feature (an
+    iron band, a stone base), so it's only worth the risk for sprites that
+    BOUNCE — where the shadow would ride up off the ground. The director enables
+    it for simple_creature only; static props and characters keep their detail.
     """
     def _finish(subject: Image.Image, method: str) -> tuple[Image.Image, str]:
         if trim_shadow:

@@ -128,6 +128,29 @@ def test_execute_isolates_subjects_but_not_tiles(monkeypatch, tmp_path):
     assert (alpha == 255).all()      # tiles stay fully opaque
 
 
+def test_deshadow_only_for_simple_creature(exec_env, tmp_path, monkeypatch):
+    # cast-shadow trim is scoped to bouncing creatures; props/characters keep
+    # their grey detail (Checkpoint A/B: it was eating a chest's iron bands)
+    import spriteforge.isolate as iso
+
+    seen: list[bool | None] = []
+
+    def fake_isolate(img, **kwargs):
+        seen.append(kwargs.get("trim_shadow"))
+        return img.convert("RGBA"), "flood"
+
+    monkeypatch.setattr(iso, "isolate_subject", fake_isolate)
+
+    execute_plan(Plan(workstream="simple_creature", enriched_prompt="a slime",
+                      size=32, actions=[], isolate=True), tmp_path / "c", pipe=exec_env)
+    assert seen and all(v is True for v in seen)
+
+    seen.clear()
+    execute_plan(Plan(workstream="static_prop", enriched_prompt="a chest",
+                      size=32, isolate=True), tmp_path / "p", pipe=exec_env)
+    assert seen and all(v is False for v in seen)
+
+
 def test_heuristic_sway_props():
     for prompt in ("a tree swaying in the wind", "an old oak tree",
                    "a tattered flag on a pole"):

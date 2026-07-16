@@ -40,6 +40,26 @@ def test_strip_cast_shadow_leaves_shadowless_sprite():
     assert np.array_equal(np.asarray(before), np.asarray(out))
 
 
+def test_isolate_subject_deshadow_is_opt_in():
+    # a teal blob with a grey shadow band, on a plain white background
+    size = 64
+    arr = np.full((size, size, 3), 250, dtype=np.uint8)
+    y, x = np.mgrid[0:size, 0:size]
+    body = (x - size / 2) ** 2 + ((y - size * 0.42) / 1.1) ** 2 < (size * 0.30) ** 2
+    arr[body] = (70, 190, 195)
+    band = (y >= int(size * 0.80)) & (np.abs(x - size / 2) < size * 0.28)
+    arr[band] = (172, 168, 176)
+    img = Image.fromarray(arr, "RGB")
+
+    kept, _ = isolate_subject(img)                       # default: shadow retained
+    stripped, _ = isolate_subject(img, trim_shadow=True)
+    br = slice(int(size * 0.80), None)
+    kept_band = (np.asarray(kept)[br, :, 3] > 128).sum()
+    strip_band = (np.asarray(stripped)[br, :, 3] > 128).sum()
+    assert kept_band > 0                                 # band opaque by default
+    assert strip_band < kept_band                        # opt-in trim removed it
+
+
 def test_strip_cast_shadow_spares_greyscale_subject():
     # a genuinely grey subject must not be eaten (body_chroma guard)
     arr = np.zeros((64, 64, 4), dtype=np.uint8)

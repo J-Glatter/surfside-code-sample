@@ -369,12 +369,18 @@ def execute_plan(
                        seam_error=seam_error(raw))
         return results
 
+    # A baked cast shadow only misbehaves when the sprite bounces (it would ride
+    # up off the ground), so only de-shadow simple_creatures. Stripping it from
+    # a static prop or a character risks eating legitimately grey detail — iron
+    # bands on a chest, a stone base (field bug at Checkpoint A/B).
+    deshadow = plan.workstream == "simple_creature"
+
     def _isolated(raw):
         if not plan.isolate:
             return raw
         from .isolate import isolate_subject
 
-        subject, method = isolate_subject(raw)
+        subject, method = isolate_subject(raw, trim_shadow=deshadow)
         if method is None:
             print("director: could not isolate the subject — keeping the full "
                   "render (install the [isolate] extra for ML cutout of busy "
