@@ -47,13 +47,24 @@ export ANTHROPIC_API_KEY=sk-ant-...       # optional: enables the LLM director
    `pip install` step is already done). First generation downloads ~4 GB of
    SD weights — on a datacenter pipe that's a couple of minutes.
 
-## Getting results back
+## Viewing and getting results back
+
+There's no file browser in RunPod's own UI — use one of:
+
+- **JupyterLab**: pod → Connect → "HTTP Service :8888" (the PyTorch template
+  usually auto-starts it). Left sidebar = file browser at /workspace; view
+  PNGs/GIFs inline, right-click → Download.
+- **scp** (always works; details under Connect → SSH; note capital -P):
 
 ```bash
-# from your Mac — copy the outputs down before killing the pod
 scp -r -P <pod-port> root@<pod-ip>:/workspace/smoke ./
 scp -r -P <pod-port> root@<pod-ip>:/workspace/spriteforge/game.json ./
 ```
+
+- **runpodctl**: on the pod `runpodctl send /workspace/smoke` → one-time code;
+  on the Mac (`brew install runpod/runpodctl/runpodctl`) `runpodctl receive <code>`.
+- **Quick look only**: `cd /workspace && python3 -m http.server 8888` and open
+  the :8888 proxy link — a browsable listing of the output dirs.
 
 Anything not copied down (or on a persistent volume) dies with the pod —
 treat outputs, extracted palettes, and trained LoRAs as the deliverables to
