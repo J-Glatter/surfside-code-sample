@@ -108,9 +108,14 @@ def default_fp16(device: str) -> bool:
 
 def build_prompt(prompt: str, use_lora: bool = True,
                  backend: str | Backend | None = None) -> str:
-    """Append the active backend's LoRA trigger tokens when the pixel LoRA is on."""
+    """Prepend the active backend's LoRA trigger tokens when the pixel LoRA is on.
+
+    Trigger FIRST, not last: CLIP truncates at 77 tokens, so a trailing trigger
+    is the first thing dropped on a long art-directed prompt (field-tested — the
+    style token was silently falling off). Leading with it guarantees it lands.
+    """
     trigger = get_backend(backend).lora_trigger
-    return f"{prompt}, {trigger}" if use_lora else prompt
+    return f"{trigger}, {prompt}" if use_lora else prompt
 
 
 def _load_pixel_lora(pipe, be: Backend) -> None:

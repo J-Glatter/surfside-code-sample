@@ -66,26 +66,28 @@ specific subject description. Always name, concretely:
   * 2-4 distinctive features that make it read as THIS creature, not a generic
     one — eyes, mouth/expression, horns, armour trim, a weapon, a glow
   * mood / charm — "cute", "menacing", "friendly video-game creature"
-Then be FORCEFUL about composition, because weak hints produce collages and
-baked-in scenery (field-tested): characters/creatures/props end with
-"single subject, one <noun> only, full body, centered, floating on a plain
-solid white background, no shadow, no ground". Tiles instead get
-"top-down view, flat seamless texture, no objects, no shadows". Do NOT add
-style words like "pixel art" — a style LoRA handles that.
+End characters/creatures/props with a SHORT composition tail: "single subject,
+full body, centered, plain white background". Tiles instead get "top-down view,
+flat seamless texture, no objects".
+
+CRITICAL length limit: the whole prompt must stay under ~60 words / 77 CLIP
+tokens or the tail is silently truncated. Be vivid but tight — spend your words
+on the subject, not on repeating what the negative prompt already forbids. Do
+NOT add style words like "pixel art" — the trigger is prepended automatically.
 
 Worked example — brief "a small slime monster" becomes:
-  "a small round gelatinous slime monster, glossy translucent lime-green body
-  with a soft white highlight, two big round eyes, a wide cheerful grin, tiny
-  stubby arms, cute chibi video-game creature, single subject, one creature
-  only, full body, centered, floating on a plain solid white background, no
-  shadow, no ground"
+  "a small round gelatinous slime monster, glossy translucent lime-green body,
+  two big round eyes, a wide cheerful grin, tiny stubby arms, cute chibi
+  video-game creature, single subject, full body, centered, plain white
+  background"
 
-negative_additions: extra negative-prompt terms this asset needs. For
-characters/creatures/props always include "multiple creatures, crowd, collage,
-pattern, border, frame, busy background, scenery, pedestal, platform, base,
-shadow, reflection, ground" plus anything asset-specific; "" only for tiles.
-Pedestals and cast shadows matter: the background remover can't tell them from
-the subject, so they must never be generated.
+negative_additions: put the what-NOT-to-draw enforcement here, not in the
+positive prompt. For characters/creatures/props always include "multiple
+creatures, crowd, collage, pattern, border, frame, busy background, scenery,
+pedestal, platform, base, shadow, reflection, ground" plus anything
+asset-specific; "" only for tiles. Pedestals and cast shadows matter: the
+background remover can't tell them from the subject, so they must never be
+generated.
 isolate: true to strip the plain background to transparency after
 generation (characters/creatures/props); false for tiles.
 size: sprite longest side in px — 64 for everything (characters, creatures,
@@ -159,13 +161,12 @@ def heuristic_decider(prompt: str) -> Plan:
 
     body = "humanoid"
     size = 64                  # one logical grid for everything (PLAN.md §6)
-    # forceful single-subject composition — weak hints produce collages
-    # (Checkpoint A/B finding). "floating ... no shadow, no ground" keeps SD
-    # from painting a pedestal the background remover can't tell from the
-    # subject. Heuristics can't invent per-subject detail — that's the LLM
-    # director's job (see DIRECTOR_SYSTEM); this is the safe offline floor.
-    subject_suffix = ("one creature only, full body, centered, floating on a "
-                      "plain solid white background, no shadow, no ground")
+    # Forceful single-subject composition — weak hints produce collages
+    # (Checkpoint A/B finding). Kept SHORT: CLIP truncates at 77 tokens, and the
+    # anti-scenery / anti-pedestal / anti-shadow enforcement already lives in the
+    # negative prompt, so repeating it here only crowds out the trigger. The rich
+    # per-subject detail is the LLM director's job (see DIRECTOR_SYSTEM).
+    subject_suffix = "full body, centered, plain white background"
     negative = _SUBJECT_NEGATIVE
     isolate = True
     if words & _TILE_WORDS:
@@ -184,8 +185,7 @@ def heuristic_decider(prompt: str) -> Plan:
         enriched = f"a single {prompt}, {subject_suffix}"
     else:
         workstream = "static_prop"
-        enriched = (f"a single {prompt}, centered, floating on a plain solid "
-                    f"white background, no shadow, no ground")
+        enriched = f"a single {prompt}, {subject_suffix}"
 
     if body == "quadruped":
         actions = list(_QUADRUPED_ACTIONS)

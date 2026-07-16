@@ -79,12 +79,12 @@ def test_default_backend_is_sdxl():
         get_backend("midjourney")
 
 
-def test_build_prompt_appends_backend_trigger():
-    # default (SDXL) trigger
-    assert build_prompt("a knight") == "a knight, pixel art"
+def test_build_prompt_prepends_backend_trigger():
+    # trigger FIRST so CLIP's 77-token truncation never drops the style token
+    assert build_prompt("a knight") == "pixel art, a knight"
     assert build_prompt("a knight", use_lora=False) == "a knight"
     # SD1.5 keeps its PixArFK trigger
-    assert build_prompt("a knight", backend="sd15") == "a knight, pixel art, PixArFK"
+    assert build_prompt("a knight", backend="sd15") == "pixel art, PixArFK, a knight"
 
 
 def _built_pipe(monkeypatch, *, cuda: bool, mps: bool = False, **kwargs):
@@ -151,7 +151,7 @@ def test_generate_call_wiring_sdxl(monkeypatch):
     g.generate(pipe, "a slime monster", seed=123)
 
     _, kwargs = pipe.call_args
-    assert kwargs["prompt"] == "a slime monster, pixel art"   # SDXL trigger
+    assert kwargs["prompt"] == "pixel art, a slime monster"   # SDXL trigger, first
     assert kwargs["negative_prompt"] == DEFAULT_NEGATIVE
     assert kwargs["width"] == 1024 and kwargs["height"] == 1024   # SDXL native
     assert kwargs["num_inference_steps"] == 28
@@ -169,7 +169,7 @@ def test_generate_call_wiring_sd15(monkeypatch):
     fake_torch.Generator.assert_called_once_with(device="cpu")
     fake_torch.Generator.return_value.manual_seed.assert_called_once_with(123)
     _, kwargs = pipe.call_args
-    assert kwargs["prompt"] == "a slime monster, pixel art, PixArFK"
+    assert kwargs["prompt"] == "pixel art, PixArFK, a slime monster"
     assert kwargs["width"] == 512 and kwargs["height"] == 512
 
 

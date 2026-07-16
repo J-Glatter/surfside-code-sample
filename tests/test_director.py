@@ -81,9 +81,11 @@ def test_heuristic_single_subject_hardening():
     slime = heuristic_decider("a small slime monster")
     assert "a single" in slime.enriched_prompt
     assert "white background" in slime.enriched_prompt
-    assert "no shadow" in slime.enriched_prompt          # no pedestal for isolation
+    # anti-pedestal/shadow enforcement lives in the negative prompt (keeps the
+    # positive prompt short enough that CLIP won't truncate the trigger)
     assert "multiple creatures" in slime.negative_additions
     assert "pedestal" in slime.negative_additions
+    assert "shadow" in slime.negative_additions
     assert slime.isolate is True
 
     tile = heuristic_decider("grass texture")

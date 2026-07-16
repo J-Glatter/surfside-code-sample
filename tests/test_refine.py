@@ -57,7 +57,7 @@ def test_refine_prompt_assembly_and_seeds(tmp_path, monkeypatch):
            variations=["back view"], per_variation=2, seed=100, strength=0.6)
 
     _, kwargs = pipe.call_args_list[0]
-    assert kwargs["prompt"] == f"a slime, back view, {LORA_TRIGGER}"
+    assert kwargs["prompt"] == f"{LORA_TRIGGER}, a slime, back view"
     assert kwargs["strength"] == 0.6
     seeds = [c.args[0] for c in
              fake_torch.Generator.return_value.manual_seed.call_args_list]

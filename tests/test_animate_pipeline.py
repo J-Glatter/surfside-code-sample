@@ -69,9 +69,9 @@ def test_animate_action_end_to_end(monkeypatch, tmp_path):
     for frame in locked:
         assert max(frame.size) == 32
         assert opaque_colors(frame) <= set(map(tuple, pal.colors))
-    # prompt carries the LoRA trigger
+    # prompt carries the LoRA trigger (prepended)
     _, kwargs = pipe.call_args
-    assert kwargs["prompt"] == f"a knight, {LORA_TRIGGER}"
+    assert kwargs["prompt"] == f"{LORA_TRIGGER}, a knight"
 
 
 def test_animate_unknown_action(monkeypatch):
