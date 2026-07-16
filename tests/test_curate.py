@@ -2,10 +2,20 @@
 
 from __future__ import annotations
 
+import sys
+import types
+from unittest.mock import MagicMock
+
 import numpy as np
 from PIL import Image
 
-from spriteforge.curate import curate, rank_by_prompt, score_candidates
+from spriteforge.curate import (
+    _l2_normalize,
+    clip_embedders,
+    curate,
+    rank_by_prompt,
+    score_candidates,
+)
 
 
 def _fixture(tmp_path, n=5):
@@ -98,3 +108,70 @@ def test_rank_by_prompt_prefers_clean_on_prompt(tmp_path):
 def test_rank_by_prompt_empty():
     assert rank_by_prompt([], "x", lambda i: np.zeros((0, 3)),
                           lambda t: np.zeros((3, 3))) == []
+
+
+def test_l2_normalize_unit_rows():
+    out = _l2_normalize(np.array([[3.0, 4.0], [0.0, 0.0]]))
+    assert np.allclose(out[0], [0.6, 0.8])
+    assert np.all(np.isfinite(out[1]))          # zero row must not divide-by-zero
+
+
+class _FakeTensor:
+    def __init__(self, arr):
+        self._arr = np.asarray(arr, dtype=float)
+    def detach(self):
+        return self
+    def cpu(self):
+        return self
+    def numpy(self):
+        return self._arr
+
+
+def test_clip_embedders_use_projection_path(monkeypatch):
+    """Regression: the field bug where get_image_features returned a ModelOutput
+    and `.norm()` blew up. Embedders must use vision_model/text_model +
+    projection heads, never get_*_features, and must return unit vectors."""
+    from PIL import Image
+
+    fake_torch = types.ModuleType("torch")
+
+    class _NoGrad:
+        def __enter__(self): return None
+        def __exit__(self, *a): return False
+    fake_torch.no_grad = lambda: _NoGrad()
+
+    model = MagicMock(name="clip_model")
+    model.to.return_value = model
+    model.eval.return_value = model
+    model.vision_model.return_value = types.SimpleNamespace(
+        pooler_output=_FakeTensor([[0, 0]]))
+    model.text_model.return_value = types.SimpleNamespace(
+        pooler_output=_FakeTensor([[0, 0], [0, 0]]))
+    model.visual_projection.return_value = _FakeTensor([[3.0, 4.0]])       # -> unit
+    model.text_projection.return_value = _FakeTensor([[0.0, 2.0], [5.0, 0.0]])
+    # if the old code path is ever restored, fail loudly
+    model.get_image_features.side_effect = AssertionError("must not be called")
+    model.get_text_features.side_effect = AssertionError("must not be called")
+
+    class _Batch(dict):
+        def to(self, device):
+            return self
+    processor = MagicMock(return_value=_Batch(pixel_values="PV",
+                                              input_ids="IDS", attention_mask="AM"))
+
+    fake_tf = types.ModuleType("transformers")
+    fake_tf.CLIPModel = types.SimpleNamespace(from_pretrained=lambda *a, **k: model)
+    fake_tf.CLIPProcessor = types.SimpleNamespace(from_pretrained=lambda *a, **k: processor)
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "transformers", fake_tf)
+
+    image_embed, text_embed = clip_embedders(device="cpu")
+
+    img = image_embed([Image.new("RGB", (4, 4))])
+    assert np.allclose(img[0], [0.6, 0.8])                       # normalised
+    model.get_image_features.assert_not_called()
+
+    txt = text_embed(["a", "b"])
+    assert np.allclose(np.linalg.norm(txt, axis=-1), [1.0, 1.0])  # unit rows
+    model.get_text_features.assert_not_called()

@@ -40,8 +40,21 @@ class CandidateScore:
     quality: float   # positive-anchor minus negative-anchor similarity
 
 
+def _l2_normalize(arr: np.ndarray) -> np.ndarray:
+    """Row-wise unit vectors, safe on zero rows."""
+    return arr / (np.linalg.norm(arr, axis=-1, keepdims=True) + 1e-8)
+
+
 def clip_embedders(device: str | None = None) -> tuple[ImageEmbedFn, TextEmbedFn]:
-    """Real CLIP embedders (lazy; needs the [curate] extra: torch + transformers)."""
+    """Real CLIP embedders (lazy; needs the [curate] extra: torch + transformers).
+
+    Uses the stable submodule + projection path (vision_model/text_model ->
+    visual_projection/text_projection) rather than get_image_features /
+    get_text_features, whose return type has drifted across transformers
+    versions (field bug: newer builds returned a ModelOutput, so `.norm()` blew
+    up and best-of-N silently fell back to candidate 0). Normalisation happens
+    in numpy so it never depends on the tensor's API.
+    """
     import torch
     from transformers import CLIPModel, CLIPProcessor
 
@@ -56,16 +69,19 @@ def clip_embedders(device: str | None = None) -> tuple[ImageEmbedFn, TextEmbedFn
         inputs = processor(images=[im.convert("RGB") for im in images],
                            return_tensors="pt").to(device)
         with torch.no_grad():
-            feats = model.get_image_features(**inputs)
-        feats = feats / feats.norm(dim=-1, keepdim=True)
-        return feats.cpu().numpy()
+            pooled = model.vision_model(pixel_values=inputs["pixel_values"]).pooler_output
+            feats = model.visual_projection(pooled)
+        return _l2_normalize(feats.detach().cpu().numpy())
 
     def text_embed(texts: list[str]) -> np.ndarray:
         inputs = processor(text=texts, return_tensors="pt", padding=True).to(device)
         with torch.no_grad():
-            feats = model.get_text_features(**inputs)
-        feats = feats / feats.norm(dim=-1, keepdim=True)
-        return feats.cpu().numpy()
+            pooled = model.text_model(
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs.get("attention_mask"),
+            ).pooler_output
+            feats = model.text_projection(pooled)
+        return _l2_normalize(feats.detach().cpu().numpy())
 
     return image_embed, text_embed
 
