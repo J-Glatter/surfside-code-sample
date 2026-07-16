@@ -97,6 +97,35 @@ def score_candidates(
             for p, i, q in zip(paths, identity, quality, strict=True)]
 
 
+def rank_by_prompt(
+    images: list[Image.Image],
+    prompt: str,
+    image_embed: ImageEmbedFn | None = None,
+    text_embed: TextEmbedFn | None = None,
+    quality_weight: float = 1.0,
+) -> list[tuple[int, float]]:
+    """Rank a batch of fresh candidates with no hero to compare against.
+
+    A single seed is a gamble — SD output swings wildly seed to seed, so a
+    "hero" should be the best of a batch, not the first roll. Score each by how
+    well it matches the request (CLIP image-text alignment) plus the clean-vs-
+    blurry quality margin, and return (index, score) best-first.
+    """
+    if not images:
+        return []
+    if image_embed is None or text_embed is None:
+        real_image, real_text = clip_embedders()
+        image_embed = image_embed or real_image
+        text_embed = text_embed or real_text
+
+    embs = image_embed([im.convert("RGB") for im in images])
+    anchors = text_embed([prompt, POSITIVE_QUALITY, NEGATIVE_QUALITY])
+    align = embs @ anchors[0]
+    quality = embs @ anchors[1] - embs @ anchors[2]
+    scores = align + quality_weight * quality
+    return sorted(enumerate(map(float, scores)), key=lambda t: t[1], reverse=True)
+
+
 def curate(
     candidates: list[str | Path],
     hero: Image.Image | str | Path,

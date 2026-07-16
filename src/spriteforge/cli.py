@@ -246,7 +246,8 @@ def _cmd_make(a: argparse.Namespace) -> None:
 
     fp16 = True if a.fp16 else False if a.fp32 else None
     results = execute_plan(plan, a.output, palette=_load_palette(a),
-                           seed=a.seed, fp16=fp16)
+                           seed=a.seed, fp16=fp16,
+                           candidates=a.candidates, pick=a.pick)
     for key, value in results.items():
         if isinstance(value, list):
             value = ", ".join(str(v) for v in value)
@@ -450,6 +451,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_make.add_argument("-o", "--output", default="assets")
     p_make.add_argument("--palette", default=None, metavar="FILE")
     p_make.add_argument("--seed", type=int, default=0)
+    p_make.add_argument("--candidates", type=int, default=1, metavar="N",
+                        help="roll N seeds for creatures/props and keep the "
+                             "CLIP-best (a hero shouldn't ride one lucky seed)")
+    p_make.add_argument("--pick", type=int, default=None, metavar="I",
+                        help="force candidate I instead of the CLIP pick "
+                             "(see the candidates/ folder)")
     p_make.add_argument("--offline", action="store_true")
     p_make.add_argument("--model", default=None)
     make_fp = p_make.add_mutually_exclusive_group()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from spriteforge.curate import curate, score_candidates
+from spriteforge.curate import curate, rank_by_prompt, score_candidates
 
 
 def _fixture(tmp_path, n=5):
@@ -74,3 +74,27 @@ def test_curate_copies_ranked_winners(tmp_path):
 def test_empty_candidates(tmp_path):
     _, hero, image_embed, text_embed = _fixture(tmp_path)
     assert curate([], hero, image_embed=image_embed, text_embed=text_embed) == []
+
+
+def test_rank_by_prompt_prefers_clean_on_prompt(tmp_path):
+    # no hero: rank fresh candidates by prompt alignment + clean-vs-blurry margin
+    paths, _hero, image_embed, _t = _fixture(tmp_path)
+    images = [Image.open(p) for p in paths]
+
+    def text_embed(texts):
+        # prompt anchor -> identity axis; positive -> clean; negative -> mess
+        return np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+
+    ranked = rank_by_prompt(images, "a slime", image_embed, text_embed)
+    order = [i for i, _ in ranked]
+    assert len(order) == len(images)
+    assert order[0] % 2 == 0                       # a clean candidate wins
+    # every clean (even) candidate outranks every messy (odd) one
+    evens = [order.index(i) for i in range(0, len(images), 2)]
+    odds = [order.index(i) for i in range(1, len(images), 2)]
+    assert max(evens) < min(odds)
+
+
+def test_rank_by_prompt_empty():
+    assert rank_by_prompt([], "x", lambda i: np.zeros((0, 3)),
+                          lambda t: np.zeros((3, 3))) == []

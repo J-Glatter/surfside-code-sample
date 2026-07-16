@@ -257,6 +257,51 @@ def test_execute_simple_creature_full_output(exec_env, tmp_path):
     assert results["actions"] == ["bounce", "idle"]
 
 
+def test_execute_creature_batch_picks_and_saves_candidates(exec_env, tmp_path):
+    plan = Plan(workstream="simple_creature", enriched_prompt="a slime",
+                size=32, actions=["bounce"])
+    seen = {}
+
+    def pick_second(images, prompt):
+        seen["n"] = len(images)
+        seen["prompt"] = prompt
+        return 1
+
+    results = execute_plan(plan, tmp_path, pipe=exec_env,
+                           candidates=3, pick_fn=pick_second)
+
+    assert seen["n"] == 3 and seen["prompt"] == "a slime"
+    assert results["chosen"] == 1
+    assert len(list((tmp_path / "candidates").glob("cand_*.png"))) == 3
+    # the winning candidate is the one promoted to sprite.png
+    import numpy as np
+    won = np.asarray(Image.open(tmp_path / "candidates" / "cand_01.png"))
+    assert np.array_equal(won, np.asarray(Image.open(results["sprite"])))
+    assert (tmp_path / "bounce").exists()      # animation still runs on the winner
+
+
+def test_execute_creature_pick_overrides_chooser(exec_env, tmp_path):
+    plan = Plan(workstream="simple_creature", enriched_prompt="a slime",
+                size=32, actions=[])
+
+    def never(images, prompt):
+        raise AssertionError("pick_fn must not run when --pick is given")
+
+    results = execute_plan(plan, tmp_path, pipe=exec_env,
+                           candidates=4, pick=2, pick_fn=never)
+    assert results["chosen"] == 2
+
+
+def test_execute_single_candidate_unchanged(exec_env, tmp_path):
+    # default candidates=1 keeps the old flat layout (no candidates/ dir)
+    plan = Plan(workstream="simple_creature", enriched_prompt="a slime",
+                size=32, actions=[])
+    results = execute_plan(plan, tmp_path, pipe=exec_env)
+    assert (tmp_path / "sprite.png").exists()
+    assert not (tmp_path / "candidates").exists()
+    assert "chosen" not in results
+
+
 def test_execute_limbed_character_heroes_and_next_steps(exec_env, tmp_path):
     plan = Plan(workstream="limbed_character", enriched_prompt="a knight", size=32)
 

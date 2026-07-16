@@ -287,6 +287,23 @@ Hero candidates written to {out_dir}. Next steps for the character ratchet
 HERO_CANDIDATES = 4
 
 
+def _pick_best_by_clip(images: list[Image.Image], prompt: str) -> int:
+    """Best-of-N winner via CLIP (prompt alignment + clean-vs-blurry margin).
+
+    Never allowed to block the pipeline: if the [curate] extra or its models
+    are unavailable, fall back to the first candidate.
+    """
+    try:
+        from .curate import rank_by_prompt
+
+        ranked = rank_by_prompt(images, prompt)
+        return ranked[0][0] if ranked else 0
+    except Exception as e:  # noqa: BLE001 — CLIP missing/unreachable
+        print(f"director: CLIP pick unavailable ({type(e).__name__}: {e}) — "
+              f"keeping candidate 0")
+        return 0
+
+
 def execute_plan(
     plan: Plan,
     out_dir: str | Path,
@@ -294,11 +311,20 @@ def execute_plan(
     seed: int = 0,
     fp16: bool | None = None,
     pipe=None,
+    candidates: int = 1,
+    pick: int | None = None,
+    pick_fn: Callable[[list[Image.Image], str], int] | None = None,
 ) -> dict:
     """Run the plan's workstream. Returns a dict of output paths/metrics.
 
-    `pipe` is injectable for tests; by default the SD pipeline is built lazily
-    (needs the [generate] extra — GPU boxes).
+    `candidates` rolls that many seeds for the single-sprite workstreams
+    (simple_creature / static_prop) and keeps the best — a hero shouldn't ride
+    on one lucky seed. `pick` forces a specific candidate index (human
+    override); otherwise `pick_fn` chooses (default: CLIP best-of-N). All
+    candidates are saved so the choice can be revisited.
+
+    `pipe`/`pick_fn` are injectable for tests; by default the SD pipeline is
+    built lazily (needs the [generate] extra — GPU boxes).
     """
     from .generate import generate
     from .pixelize import pixelize
@@ -369,9 +395,33 @@ def execute_plan(
 
     # static_prop and simple_creature share the single-sprite start; both may
     # carry procedural actions (a slime bounces, a tree sways, a chest is still)
-    raw = _generate()
-    sprite = pixelize(_isolated(raw), size=plan.size, colors=plan.colors,
-                      palette=palette)
+    n = max(1, candidates)
+    sprites = []
+    for i in range(n):
+        raw = _generate(seed_offset=i)
+        sprites.append(pixelize(_isolated(raw), size=plan.size,
+                                colors=plan.colors, palette=palette))
+
+    if n > 1:
+        cand_dir = out_dir / "candidates"
+        cand_dir.mkdir(exist_ok=True)
+        cand_paths = []
+        for i, s in enumerate(sprites):
+            p = cand_dir / f"cand_{i:02d}.png"
+            s.save(p)
+            cand_paths.append(p)
+        if pick is not None:
+            winner = pick % n
+        else:
+            chooser = pick_fn or _pick_best_by_clip
+            winner = chooser(sprites, plan.enriched_prompt) % n
+        print(f"director: kept candidate {winner} of {n} "
+              f"({'forced' if pick is not None else 'CLIP best-of-N'})")
+        results.update(candidates=cand_paths, chosen=winner)
+        sprite = sprites[winner]
+    else:
+        sprite = sprites[0]
+
     sprite_path = out_dir / "sprite.png"
     sprite.save(sprite_path)
     results["sprite"] = sprite_path
