@@ -52,9 +52,10 @@ def _cmd_pixelize(a: argparse.Namespace) -> None:
     if a.isolate:
         from .isolate import isolate_subject
 
-        src, found = isolate_subject(src)
-        if not found:
-            print("isolate: no plain background found — keeping the full image")
+        src, method = isolate_subject(src)
+        if method is None:
+            print("isolate: could not isolate — keeping the full image "
+                  "(install the [isolate] extra for ML cutout)")
     sprite = pixelize(src, size=a.size, colors=a.colors,
                       alpha_threshold=a.alpha_threshold, seed=a.seed,
                       palette=_load_palette(a))
@@ -83,9 +84,10 @@ def _cmd_generate(a: argparse.Namespace) -> None:
     if a.isolate:
         from .isolate import isolate_subject
 
-        raw, found = isolate_subject(raw)
-        if not found:
-            print("isolate: no plain background found — keeping the full render")
+        raw, method = isolate_subject(raw)
+        if method is None:
+            print("isolate: could not isolate — keeping the full render "
+                  "(install the [isolate] extra for ML cutout)")
     sprite = pixelize(raw, size=a.size, colors=a.colors, palette=_load_palette(a))
     _save_sprite(sprite, a.output, a.colors, a.preview)
 

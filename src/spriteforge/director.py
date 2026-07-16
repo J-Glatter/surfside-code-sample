@@ -127,7 +127,8 @@ _SWAY_WORDS = {"tree", "flag", "banner", "plant", "flower", "bush", "sapling",
                "palm", "reed", "vine", "lantern", "sign", "sway", "swaying",
                "wind", "waving", "fluttering"}
 _SUBJECT_NEGATIVE = ("multiple creatures, crowd, collage, pattern, border, "
-                     "frame, busy background, scenery")
+                     "frame, busy background, scenery, landscape, sky, "
+                     "clouds, hills, stars")
 
 
 def heuristic_decider(prompt: str) -> Plan:
@@ -317,9 +318,11 @@ def execute_plan(
             return raw
         from .isolate import isolate_subject
 
-        subject, found = isolate_subject(raw)
-        if not found:
-            print("director: no plain background found — keeping the full render")
+        subject, method = isolate_subject(raw)
+        if method is None:
+            print("director: could not isolate the subject — keeping the full "
+                  "render (install the [isolate] extra for ML cutout of busy "
+                  "backgrounds)")
         return subject
 
     if plan.workstream == "limbed_character":

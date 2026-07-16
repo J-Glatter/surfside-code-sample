@@ -38,7 +38,7 @@ sys.exit(0 if torch.cuda.is_available() else 1)
 EOF
 
 echo "== spriteforge =="
-pip install -q -e ".[generate,curate,animate,director]"
+pip install -q -e ".[generate,curate,animate,director,isolate]"
 
 python3 -c "import torch; print('cuda:', torch.cuda.is_available(),
 '| device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else '-')"

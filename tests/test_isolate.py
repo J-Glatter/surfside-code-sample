@@ -59,3 +59,56 @@ def test_deterministic():
     a, _ = isolate_subject(_subject_on_bg())
     b, _ = isolate_subject(_subject_on_bg())
     assert np.array_equal(np.asarray(a), np.asarray(b))
+
+
+def test_flood_reports_method():
+    _, method = isolate_subject(_subject_on_bg())
+    assert method == "flood"
+
+
+def test_rembg_failure_degrades_gracefully(monkeypatch):
+    """A tier-2 crash (e.g. blocked weight download) must not kill the job."""
+    import sys
+    import types
+
+    from spriteforge import isolate as iso
+
+    fake = types.ModuleType("rembg")
+    fake.remove = lambda img, session=None: img
+    fake.new_session = lambda name: (_ for _ in ()).throw(OSError("403 blocked"))
+    monkeypatch.setitem(sys.modules, "rembg", fake)
+    monkeypatch.setattr(iso, "_REMBG_SESSION", None)
+
+    rng = np.random.default_rng(3)
+    busy = Image.fromarray(rng.integers(0, 256, (64, 64, 3), dtype=np.uint8), "RGB")
+    out, method = iso.isolate_subject(busy)
+
+    assert method is None
+    assert np.all(np.asarray(out)[..., 3] == 255)   # untouched, not crashed
+
+
+def test_rembg_fallback_wiring(monkeypatch):
+    """Busy scene + a fake rembg module -> tier 2 is used and reported."""
+    import sys
+    import types
+
+    from spriteforge import isolate as iso
+
+    def fake_remove(img, session=None):
+        arr = np.asarray(img.convert("RGBA")).copy()
+        arr[:32, :, 3] = 0                      # "cut" the top half
+        return Image.fromarray(arr, "RGBA")
+
+    fake = types.ModuleType("rembg")
+    fake.remove = fake_remove
+    fake.new_session = lambda name: object()
+    monkeypatch.setitem(sys.modules, "rembg", fake)
+    monkeypatch.setattr(iso, "_REMBG_SESSION", None)
+
+    rng = np.random.default_rng(2)
+    busy = Image.fromarray(rng.integers(0, 256, (64, 64, 3), dtype=np.uint8), "RGB")
+    out, method = iso.isolate_subject(busy)
+
+    assert method == "rembg"
+    alpha = np.asarray(out)[..., 3]
+    assert alpha[0, 0] == 0 and alpha[-1, -1] == 255

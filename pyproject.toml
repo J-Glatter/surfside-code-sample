@@ -39,6 +39,11 @@ animate = [
 director = [
     "anthropic>=0.60",
 ]
+# ML background cutout (rembg/u2net) for renders where the prompt lost the
+# plain-background battle — the pixel-art LoRA loves painting full scenes
+isolate = [
+    "rembg[cpu]>=2.0",   # bare rembg has no onnxruntime backend
+]
 dev = [
     "pytest>=8",
     "ruff>=0.4",
