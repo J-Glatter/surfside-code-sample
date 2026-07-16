@@ -81,6 +81,20 @@ accelerate launch train_network.py --config_file /workspace/knight_ds/kohya_conf
 No GUI needed — the config template `dataset prep` writes is CLI-ready.
 Training on a 4090 is faster than the 3080 estimate (~30–45 min → often ~15–25).
 
+## If Hugging Face is down
+
+It happens (field-tested 2026-07). Symptoms: 504s/hangs on `huggingface.co`
+from the pod *and* from your own browser; `HF_ENDPOINT` mirror overrides may
+be ignored by newer `huggingface_hub` versions, so don't sink time there.
+Check status.huggingface.co — if it's a real outage, **terminate the pod and
+wait it out**; no region or workaround helps, and the resume is 3 commands.
+Once weights are cached on a volume, prefix commands with `HF_HUB_OFFLINE=1`
+to become immune to Hub weather entirely.
+
+**Phase-5 lesson (bank it):** production serving must never touch the Hub at
+request time — bake weights into the container image or pre-staged volumes;
+Hub access is a build-time-only dependency.
+
 ## Cost hygiene
 
 - **Stop the pod when you walk away** — the meter is per-minute, and idle
