@@ -80,8 +80,10 @@ def test_heuristic_single_subject_hardening():
     """Checkpoint A/B findings: forceful composition + isolation defaults."""
     slime = heuristic_decider("a small slime monster")
     assert "a single" in slime.enriched_prompt
-    assert "plain white background" in slime.enriched_prompt
+    assert "white background" in slime.enriched_prompt
+    assert "no shadow" in slime.enriched_prompt          # no pedestal for isolation
     assert "multiple creatures" in slime.negative_additions
+    assert "pedestal" in slime.negative_additions
     assert slime.isolate is True
 
     tile = heuristic_decider("grass texture")

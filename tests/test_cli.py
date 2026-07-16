@@ -24,6 +24,27 @@ def test_pixelize_subcommand(tmp_path, gradient_scene):
     assert preview.size == (sprite.width * 4, sprite.height * 4)
 
 
+def test_pixelize_output_without_extension_defaults_to_png(tmp_path, gradient_scene):
+    # Checkpoint A/B field bug: `-o knight_v3` (no extension) crashed in PIL
+    src = tmp_path / "in.png"
+    gradient_scene.save(src)
+
+    main(["pixelize", str(src), "-o", str(tmp_path / "knight_v3")])
+
+    assert (tmp_path / "knight_v3.png").exists()
+
+
+def test_pixelize_output_to_directory(tmp_path, gradient_scene):
+    src = tmp_path / "in.png"
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    gradient_scene.save(src)
+
+    main(["pixelize", str(src), "-o", str(out_dir)])
+
+    assert (out_dir / "sprite.png").exists()
+
+
 def test_pixelize_default_size_is_64(tmp_path, gradient_scene):
     src = tmp_path / "in.png"
     out = tmp_path / "out.png"

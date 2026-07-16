@@ -36,7 +36,20 @@ def _load_palette(a: argparse.Namespace):
     return Palette.load(a.palette)
 
 
+def _png_path(output: str, default_name: str = "sprite.png") -> str:
+    """A bare name or directory gives PIL no format to infer — default to PNG
+    (the only format that keeps the alpha channel we work so hard for)."""
+    path = Path(output)
+    if path.is_dir():
+        path = path / default_name
+    elif path.suffix == "":
+        path = path.with_name(path.name + ".png")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
+
+
 def _save_sprite(sprite, output: str, colors: int, preview: int) -> None:
+    output = _png_path(output)
     sprite.save(output)
     print(f"wrote {output} ({sprite.width}x{sprite.height}, <= {colors} colours)")
     if preview > 0:
@@ -78,8 +91,9 @@ def _cmd_generate(a: argparse.Namespace) -> None:
     raw = generate(pipe, a.prompt, negative=a.negative, steps=a.steps,
                    guidance=a.guidance, seed=a.seed, use_lora=use_lora)
     if a.raw:
-        raw.save(a.raw)
-        print(f"wrote raw render {a.raw}")
+        raw_out = _png_path(a.raw, default_name="raw.png")
+        raw.save(raw_out)
+        print(f"wrote raw render {raw_out}")
 
     if a.isolate:
         from .isolate import isolate_subject

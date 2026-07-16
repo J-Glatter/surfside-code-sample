@@ -74,6 +74,12 @@ def isolate_subject(
     arr = np.asarray(rgba).astype(np.float64)
     lab = srgb_to_oklab(arr[..., :3])
 
+    # An essentially uniform image has no subject to find — bail before either
+    # tier (u2net happily hallucinates a cutout on a blank canvas).
+    spread = float(np.linalg.norm(lab - lab.mean(axis=(0, 1)), axis=-1).max())
+    if spread < tolerance:
+        return rgba, None
+
     border = np.concatenate([lab[0], lab[-1], lab[1:-1, 0], lab[1:-1, -1]])
     bg_color = np.median(border, axis=0)
     candidate = np.linalg.norm(lab - bg_color, axis=-1) < tolerance

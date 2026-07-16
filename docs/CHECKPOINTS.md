@@ -7,12 +7,22 @@ Do them in order — each gates the next stage of the pipeline.
 
 ```bash
 git clone https://github.com/J-Glatter/surfside-code-sample && cd surfside-code-sample
-pip install -e ".[generate]"
+pip install -e ".[generate,director,isolate]"
+
+# Let the director art-direct the prompt. A terse brief ("a small slime
+# monster") gives SD nothing to draw and yields a featureless blob, so the LLM
+# director expands it into a concrete visual description (material, colour,
+# features, expression) and forbids pedestals/shadows the isolator can't strip.
+# Set the key to enable it (~1c/asset); without it the keyword heuristic runs
+# and still hardens composition, just without per-subject detail.
+export ANTHROPIC_API_KEY=sk-ant-...     # optional but recommended for creatures
+spriteforge make "a small slime monster" -o out/slime     # plan -> gen -> pixelize -> animate
 
 # 1. CUDA path + basic generation (first run downloads ~4 GB)
 #    Prompt for a plain white background and use --isolate so the sprite gets
-#    real transparency (field-tested: without this, sky/grass is baked in)
-spriteforge generate "a single brave knight in green armour, one figure, full body, centered, isolated on a plain white background" -o knight.png --seed 7 --preview 4 --isolate
+#    real transparency (field-tested: without this, sky/grass is baked in).
+#    -o without an extension is fine now — it defaults to .png.
+spriteforge generate "a single brave knight in green armour, one figure, full body, centered, floating on a plain solid white background, no shadow, no ground" -o knight.png --seed 7 --preview 4 --isolate
 #    -> confirm it reports no CPU warning; check the sprite's corners are transparent
 
 # 2. Generate a few style references, then lock a world palette from the best

@@ -37,9 +37,12 @@ WORKSTREAMS = ("static_prop", "simple_creature", "limbed_character", "environmen
 DIRECTOR_MODEL = "claude-opus-4-8"
 
 DIRECTOR_SYSTEM = """\
-You are the asset director for a top-down RPG pixel-art pipeline. Given a
-customer's asset request, decide which workstream produces it and enrich the
-prompt for Stable Diffusion 1.5.
+You are the asset director AND concept artist for a top-down RPG pixel-art
+pipeline. Given a customer's asset request, (1) route it to a workstream and
+(2) ART-DIRECT it into a vivid Stable Diffusion 1.5 prompt. The customer's
+words are a brief, not the final prompt — a terse request like "a small slime
+monster" gives SD nothing to draw and yields a generic featureless blob. Your
+job is to review the brief and improve it into something SD can render well.
 
 Workstreams:
 - static_prop: inanimate objects and portraits (a sword, a chest, a tree).
@@ -55,16 +58,34 @@ Workstreams:
 - environment_tile: ground/wall textures that must tile seamlessly
   (grass, cobblestone, water, sand).
 
-enriched_prompt: rewrite the request for SD 1.5 — subject first, and be
-FORCEFUL about single-subject composition: characters/creatures/props get
-"a single <subject>, one creature only, full body, centered, isolated on a
-plain white background"; tiles get "top-down view, flat texture, no objects".
-Weak hints produce collages of many creatures (field-tested). Do not add
+enriched_prompt — the core of your work. Rewrite the brief into ONE richly
+specific subject description. Always name, concretely:
+  * material / surface — gelatinous, glossy, metallic, furry, translucent...
+  * colour — a specific hue, not just "coloured"
+  * silhouette / shape language — round, blocky, spiky, tall
+  * 2-4 distinctive features that make it read as THIS creature, not a generic
+    one — eyes, mouth/expression, horns, armour trim, a weapon, a glow
+  * mood / charm — "cute", "menacing", "friendly video-game creature"
+Then be FORCEFUL about composition, because weak hints produce collages and
+baked-in scenery (field-tested): characters/creatures/props end with
+"single subject, one <noun> only, full body, centered, floating on a plain
+solid white background, no shadow, no ground". Tiles instead get
+"top-down view, flat seamless texture, no objects, no shadows". Do NOT add
 style words like "pixel art" — a style LoRA handles that.
+
+Worked example — brief "a small slime monster" becomes:
+  "a small round gelatinous slime monster, glossy translucent lime-green body
+  with a soft white highlight, two big round eyes, a wide cheerful grin, tiny
+  stubby arms, cute chibi video-game creature, single subject, one creature
+  only, full body, centered, floating on a plain solid white background, no
+  shadow, no ground"
+
 negative_additions: extra negative-prompt terms this asset needs. For
-characters/creatures/props always include "multiple creatures, crowd,
-collage, pattern, border, frame, busy background, scenery" plus anything
-asset-specific; "" only for tiles.
+characters/creatures/props always include "multiple creatures, crowd, collage,
+pattern, border, frame, busy background, scenery, pedestal, platform, base,
+shadow, reflection, ground" plus anything asset-specific; "" only for tiles.
+Pedestals and cast shadows matter: the background remover can't tell them from
+the subject, so they must never be generated.
 isolate: true to strip the plain background to transparency after
 generation (characters/creatures/props); false for tiles.
 size: sprite longest side in px — 64 for everything (characters, creatures,
@@ -128,7 +149,8 @@ _SWAY_WORDS = {"tree", "flag", "banner", "plant", "flower", "bush", "sapling",
                "wind", "waving", "fluttering"}
 _SUBJECT_NEGATIVE = ("multiple creatures, crowd, collage, pattern, border, "
                      "frame, busy background, scenery, landscape, sky, "
-                     "clouds, hills, stars")
+                     "clouds, hills, stars, pedestal, platform, base, "
+                     "shadow, reflection, ground")
 
 
 def heuristic_decider(prompt: str) -> Plan:
@@ -138,14 +160,17 @@ def heuristic_decider(prompt: str) -> Plan:
     body = "humanoid"
     size = 64                  # one logical grid for everything (PLAN.md §6)
     # forceful single-subject composition — weak hints produce collages
-    # (Checkpoint A/B finding), and the white background feeds isolation
-    subject_suffix = ("one creature only, full body, centered, "
-                      "isolated on a plain white background")
+    # (Checkpoint A/B finding). "floating ... no shadow, no ground" keeps SD
+    # from painting a pedestal the background remover can't tell from the
+    # subject. Heuristics can't invent per-subject detail — that's the LLM
+    # director's job (see DIRECTOR_SYSTEM); this is the safe offline floor.
+    subject_suffix = ("one creature only, full body, centered, floating on a "
+                      "plain solid white background, no shadow, no ground")
     negative = _SUBJECT_NEGATIVE
     isolate = True
     if words & _TILE_WORDS:
         workstream = "environment_tile"
-        enriched = f"{prompt}, top-down view, flat texture, no objects"
+        enriched = f"{prompt}, top-down view, flat seamless texture, no objects"
         negative, isolate = "", False
     elif words & _BLOB_WORDS:
         workstream = "simple_creature"
@@ -159,8 +184,8 @@ def heuristic_decider(prompt: str) -> Plan:
         enriched = f"a single {prompt}, {subject_suffix}"
     else:
         workstream = "static_prop"
-        enriched = (f"a single {prompt}, centered, "
-                    f"isolated on a plain white background")
+        enriched = (f"a single {prompt}, centered, floating on a plain solid "
+                    f"white background, no shadow, no ground")
 
     if body == "quadruped":
         actions = list(_QUADRUPED_ACTIONS)
