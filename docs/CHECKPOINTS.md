@@ -104,18 +104,36 @@ curation needed only a quick glance rather than heavy hand-picking.
 
 ## Checkpoint D — animation + the pivotal experiment (task 15)
 
+Backend split (openpose ControlNet availability, verified 2026):
+- **Humanoid → SDXL.** `xinsir/controlnet-openpose-sdxl-1.0` is solid, and the
+  frames pick up your style LoRA (`$SPRITEFORGE_STYLE_LORA`). The reliable path.
+- **Quadruped → SD1.5 (`--sd15`).** There is NO SDXL animal-openpose ControlNet
+  — the animal-pose ecosystem (`huchenlei`/`crishhh` animal_openpose) is
+  SD1.5-only. So four-legged animation runs on SD1.5; lock the world with
+  `--palette` for cohesion (the SDXL style LoRA can't cross architectures).
+  `animate --body quadruped` on SDXL stops with a message pointing here.
+
 ```bash
 pip install -e ".[animate]"
+export SPRITEFORGE_STYLE_LORA=.../myworld-style.safetensors   # frames match the world
+export SPRITEFORGE_STYLE_TRIGGER=myworld_style
 
 # 0. Eyeball the canonical cycles first (CPU, instant):
-spriteforge skeleton --action walk -o skel_preview
-#    tune constants in src/spriteforge/animate/skeleton.py if the gait looks off
+spriteforge skeleton --action walk -o skel_preview           # --body quadruped for animals
+#    tune constants in src/spriteforge/animate/skeleton*.py if the gait looks off
 
-# 1. Animate with the trained character LoRA + the locked palette
-spriteforge animate "a brave knight in green armour, sks_knight" --action walk \
-    -o frames/walk --character-lora knight_ds/output/sks_knight.safetensors \
-    --palette game.json --candidates 100
+# 1a. Humanoid walk (SDXL + xinsir openpose + your style LoRA). Keep --candidates
+#     modest: at SDXL 1024 each is ~10-15s, so 100 x 8 frames is hours.
+spriteforge animate "a brave knight in green armour with a sword and shield" \
+    --action walk -o frames/walk --palette game.json --candidates 16
 #    note the reported mean transition cost (lower = smoother)
+
+# 1b. Quadruped walk (SD1.5 animal openpose). UNVERIFIED: confirm the ControlNet
+#     loads in diffusers and our AP-10K skeleton matches its keypoint convention
+#     (the animal skeleton carries no ears/tail). If limbs don't track, adjust
+#     skeleton_quadruped.py or try --controlnet huchenlei/animal_openpose.
+spriteforge animate "a red fox" --body quadruped --sd15 \
+    -o frames/fox_walk --palette game.json --candidates 16
 
 # 2. Cheap ablation: --candidates 1 is "no selector" — compare the two walks
 # 3. Pack and drop into the engine
