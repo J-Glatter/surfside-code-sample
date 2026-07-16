@@ -45,28 +45,58 @@ spriteforge generate "a stone watchtower" -o tower2.png --seed 11 --palette game
 logical (view with `--preview 4`); also judge whether 16 colours suits the art
 direction — try `--colors 32` and re-extract if shading feels cramped.
 
-## Checkpoint C — style LoRA + the character ratchet (3080 box)
+## Checkpoint C — your own style LoRA (A40 / 24 GB+ box)
 
-Needs a kohya_ss checkout on the box.
+Replaces the stock `nerijs/pixel-art-xl` with a LoRA trained on YOUR sprites, so
+every future asset shares one look. Needs a kohya_ss (sd-scripts) checkout.
+SDXL LoRA training at 1024px wants ~16-24 GB VRAM — the A40 is comfortable, a
+10 GB card is not (drop to `--sd15` there).
 
 ```bash
-# 1. Style LoRA: curate 15-30 images that nail the game's look, then
-spriteforge dataset prep style_refs/*.png -o style_ds --trigger myworld_style --name myworld-style
-#    train per style_ds/NOTES.md (~30-45 min), then verify cohesion:
-#    prompt "a little slime monster, myworld_style" with the trained LoRA loaded.
+# 0. Gather the seed set: 15-30 of your cleanest, isolated, single-subject
+#    sprites, all in the target look. The best-of-N candidates/ folders from
+#    Checkpoint A/B are the source — copy the good ones into style_refs/.
+#    Quality >> quantity; one bad sprite teaches the LoRA a bad habit.
 
-# 2. Character ratchet round 1: pick your hero image, then
+# 1. Build the kohya dataset (emits the SDXL config + launch notes automatically)
+spriteforge dataset prep style_refs/*.png -o style_ds --trigger myworld_style --name myworld-style
+#    -> style_ds/kohya_config.toml targets stable-diffusion-xl-base-1.0 @ 1024,
+#       sdxl_train_network.py. See style_ds/NOTES.md for the exact command:
+
+# 2. Train (one-time kohya setup, then ~30-60 min on the A40)
+git clone https://github.com/kohya-ss/sd-scripts && cd sd-scripts
+pip install -r requirements.txt && accelerate config default
+accelerate launch sdxl_train_network.py --config_file ../style_ds/kohya_config.toml
+#    -> produces style_ds/output/myworld-style.safetensors (a few MB)
+
+# 3. Plug it in — --style-lora replaces the stock LoRA, --style-trigger carries
+#    your training token. Now the WHOLE pipeline speaks your style:
+spriteforge make "a small slime monster" -o out/slime_myworld --candidates 12 \
+    --style-lora style_ds/output/myworld-style.safetensors --style-trigger myworld_style \
+    --palette out/world/game.json
+```
+
+**Pass:** assets made with `--style-lora` share a consistent look with each
+other AND with your Checkpoint A/B set, with less scene-bias/prompt-fighting
+than the stock LoRA needed. Generate 3-4 different subjects and eyeball them as
+a set.
+
+### Optional: the character ratchet (a consistent named hero across angles)
+
+A *character* LoRA (vs the *style* LoRA above) locks one specific character so
+it animates on-model. Uses the same tools:
+
+```bash
+# round 1: img2img a multi-angle set off one hero, curate, train
 spriteforge refine hero.png --prompt "a brave knight in green armour" -o round1 --per-variation 8
 pip install -e ".[curate]"   # first time only
 spriteforge curate round1 --hero hero.png -o round1_keep --keep 10
-#    quick human glance over round1_keep (CLIP misses fine errors), then
 spriteforge dataset prep round1_keep/*.png -o knight_ds --trigger sks_knight --class-word character
-#    train the character LoRA per knight_ds/NOTES.md
-
-# 3. Ratchet round 2: same, but stacking the round-1 LoRA
-spriteforge refine hero.png --prompt "a brave knight in green armour" -o round2 --character-lora knight_ds/output/sks_knight.safetensors
-spriteforge curate round2 --hero hero.png -o round2_keep --keep 10
-#    retrain -> most characters are reliable by round 2-3
+#    train per knight_ds/NOTES.md, then ratchet round 2 stacking the round-1 LoRA:
+spriteforge refine hero.png --prompt "a brave knight in green armour" -o round2 \
+    --character-lora knight_ds/output/sks_knight.safetensors
+#    retrain -> most characters are reliable by round 2-3. The character LoRA
+#    then feeds the animation stage (Checkpoint D, spriteforge animate).
 ```
 
 **Pass:** round-2 outputs are clearly the same character across angles, and

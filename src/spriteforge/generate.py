@@ -107,15 +107,18 @@ def default_fp16(device: str) -> bool:
 
 
 def build_prompt(prompt: str, use_lora: bool = True,
-                 backend: str | Backend | None = None) -> str:
+                 backend: str | Backend | None = None,
+                 trigger: str | None = None) -> str:
     """Prepend the active backend's LoRA trigger tokens when the pixel LoRA is on.
 
     Trigger FIRST, not last: CLIP truncates at 77 tokens, so a trailing trigger
     is the first thing dropped on a long art-directed prompt (field-tested — the
     style token was silently falling off). Leading with it guarantees it lands.
     """
-    trigger = get_backend(backend).lora_trigger
-    return f"{trigger}, {prompt}" if use_lora else prompt
+    # `trigger` overrides the backend default (a custom style LoRA has its own
+    # trigger token); trigger="" suppresses it entirely.
+    tok = get_backend(backend).lora_trigger if trigger is None else trigger
+    return f"{tok}, {prompt}" if use_lora and tok else prompt
 
 
 def _load_pixel_lora(pipe, be: Backend) -> None:
@@ -132,10 +135,14 @@ def _load_pixel_lora(pipe, be: Backend) -> None:
 
 
 def build_pipe(fp16: bool | None = None, use_lora: bool = True,
-               device: str | None = None, backend: str | Backend | None = None):
+               device: str | None = None, backend: str | Backend | None = None,
+               style_lora: str | None = None):
     """Assemble the pipeline for the chosen backend on the best available device.
 
     fp16=None means auto: fp16 on CUDA, fp32 elsewhere.
+    `style_lora` (a local .safetensors path or Hub id) replaces the stock pixel
+    LoRA — this is how a LoRA you trained at Checkpoint C plugs in. Pair it with
+    generate(trigger=...) so the prompt carries your training token.
     """
     import torch
     from diffusers import DPMSolverMultistepScheduler
@@ -165,7 +172,14 @@ def build_pipe(fp16: bool | None = None, use_lora: bool = True,
         pipe.enable_attention_slicing()  # lower peak memory on unified RAM / CPU
 
     if use_lora:
-        _load_pixel_lora(pipe, be)
+        if style_lora:
+            try:
+                pipe.load_lora_weights(style_lora)
+                print(f"loaded style LoRA: {style_lora}")
+            except Exception as e:  # noqa: BLE001
+                print(f"couldn't load style LoRA {style_lora} ({e}). Base model only.")
+        else:
+            _load_pixel_lora(pipe, be)
     return pipe
 
 
@@ -179,15 +193,17 @@ def generate(
     use_lora: bool = True,
     backend: str | Backend | None = None,
     size: int | None = None,
+    trigger: str | None = None,
 ):
     """Run the pipeline once; returns the raw PIL image (pre-pixelize).
 
     `size` defaults to the backend's native resolution (SDXL 1024, SD1.5 512).
+    `trigger` overrides the prepended style token (for a custom style LoRA).
     """
     import torch
 
     be = get_backend(backend)
-    full_prompt = build_prompt(prompt, use_lora, backend=be)
+    full_prompt = build_prompt(prompt, use_lora, backend=be, trigger=trigger)
     dim = size or be.size
     generator = None
     if seed is not None:

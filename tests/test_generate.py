@@ -131,6 +131,18 @@ def test_build_pipe_no_lora(monkeypatch):
     sdxl.load_lora_weights.assert_not_called()
 
 
+def test_build_pipe_custom_style_lora_replaces_stock(monkeypatch):
+    _, _sd, sdxl = _built_pipe(monkeypatch, cuda=True,
+                               style_lora="/w/lora/myworld.safetensors")
+    # a trained style LoRA is loaded in place of the stock pixel LoRA
+    sdxl.load_lora_weights.assert_called_once_with("/w/lora/myworld.safetensors")
+
+
+def test_build_prompt_custom_trigger():
+    assert build_prompt("a slime", trigger="myworld") == "myworld, a slime"
+    assert build_prompt("a slime", trigger="") == "a slime"        # suppressed
+
+
 def test_build_pipe_survives_lora_failure(monkeypatch):
     from spriteforge import generate as g
 

@@ -318,6 +318,8 @@ def execute_plan(
     pick: int | None = None,
     pick_fn: Callable[[list[Image.Image], str], int] | None = None,
     backend=None,
+    style_lora: str | None = None,
+    style_trigger: str | None = None,
 ) -> dict:
     """Run the plan's workstream. Returns a dict of output paths/metrics.
 
@@ -340,7 +342,7 @@ def execute_plan(
     if pipe is None:
         from .generate import build_pipe
 
-        pipe = build_pipe(fp16=fp16, backend=backend)
+        pipe = build_pipe(fp16=fp16, backend=backend, style_lora=style_lora)
 
     def _generate(seed_offset: int = 0):
         kwargs = {}
@@ -349,7 +351,7 @@ def execute_plan(
 
             kwargs["negative"] = f"{DEFAULT_NEGATIVE}, {negative_extra}"
         return generate(pipe, plan.enriched_prompt, seed=seed + seed_offset,
-                        backend=backend, **kwargs)
+                        backend=backend, trigger=style_trigger, **kwargs)
 
     results: dict = {"workstream": plan.workstream}
 

@@ -326,6 +326,23 @@ def test_execute_creature_pick_overrides_chooser(exec_env, tmp_path):
     assert results["chosen"] == 2
 
 
+def test_execute_plan_prepends_style_trigger(tmp_path, monkeypatch):
+    # a trained style LoRA's trigger token must lead the prompt SD sees
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module())
+    captured = {}
+
+    def run(**kwargs):
+        captured["prompt"] = kwargs["prompt"]
+        return types.SimpleNamespace(
+            images=[Image.new("RGB", (64, 64), (90, 200, 120))])
+
+    pipe = MagicMock(side_effect=run)
+    plan = Plan(workstream="simple_creature", enriched_prompt="a slime",
+                size=32, actions=[], isolate=False)
+    execute_plan(plan, tmp_path, pipe=pipe, style_trigger="myworld_style")
+    assert captured["prompt"].startswith("myworld_style, ")
+
+
 def test_execute_single_candidate_unchanged(exec_env, tmp_path):
     # default candidates=1 keeps the old flat layout (no candidates/ dir)
     plan = Plan(workstream="simple_creature", enriched_prompt="a slime",

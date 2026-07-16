@@ -87,7 +87,8 @@ def _cmd_generate(a: argparse.Namespace) -> None:
     fp16 = True if a.fp16 else False if a.fp32 else None  # None = auto per device
     use_lora = not a.no_lora
     be = _backend(a)
-    pipe = build_pipe(fp16=fp16, use_lora=use_lora, backend=be)
+    pipe = build_pipe(fp16=fp16, use_lora=use_lora, backend=be,
+                      style_lora=a.style_lora)
     if a.tile:
         from .tiling import enable_tiling
 
@@ -95,7 +96,8 @@ def _cmd_generate(a: argparse.Namespace) -> None:
         print(f"seamless tiling on ({patched} conv layers wrapped)")
     print("generating...")
     raw = generate(pipe, a.prompt, negative=a.negative, steps=a.steps,
-                   guidance=a.guidance, seed=a.seed, use_lora=use_lora, backend=be)
+                   guidance=a.guidance, seed=a.seed, use_lora=use_lora, backend=be,
+                   trigger=a.style_trigger)
     if a.raw:
         raw_out = _png_path(a.raw, default_name="raw.png")
         raw.save(raw_out)
@@ -255,7 +257,8 @@ def _cmd_make(a: argparse.Namespace) -> None:
     fp16 = True if a.fp16 else False if a.fp32 else None
     results = execute_plan(plan, a.output, palette=_load_palette(a),
                            seed=a.seed, fp16=fp16,
-                           candidates=a.candidates, pick=a.pick, backend=_backend(a))
+                           candidates=a.candidates, pick=a.pick, backend=_backend(a),
+                           style_lora=a.style_lora, style_trigger=a.style_trigger)
     for key, value in results.items():
         if isinstance(value, list):
             value = ", ".join(str(v) for v in value)
@@ -332,6 +335,12 @@ def build_parser() -> argparse.ArgumentParser:
                             "that bounce; can eat grey detail on props)")
     p_gen.add_argument("--sd15", action="store_true",
                        help="use the SD1.5 backend instead of the default SDXL")
+    p_gen.add_argument("--style-lora", default=None, metavar="PATH_OR_ID",
+                       help="use a trained style LoRA instead of the stock "
+                            "pixel LoRA (Checkpoint C output)")
+    p_gen.add_argument("--style-trigger", default=None, metavar="TOKEN",
+                       help="prompt trigger token for --style-lora (empty to "
+                            "prepend nothing)")
     p_gen.set_defaults(func=_cmd_generate)
 
     p_pal = sub.add_parser("palette", help="create and inspect locked palettes")
@@ -487,6 +496,11 @@ def build_parser() -> argparse.ArgumentParser:
     make_fp.add_argument("--fp32", action="store_true")
     p_make.add_argument("--sd15", action="store_true",
                         help="use the SD1.5 backend instead of the default SDXL")
+    p_make.add_argument("--style-lora", default=None, metavar="PATH_OR_ID",
+                        help="use a trained style LoRA instead of the stock "
+                             "pixel LoRA (Checkpoint C output)")
+    p_make.add_argument("--style-trigger", default=None, metavar="TOKEN",
+                        help="prompt trigger token for --style-lora")
     p_make.set_defaults(func=_cmd_make)
 
     p_work = sub.add_parser(
