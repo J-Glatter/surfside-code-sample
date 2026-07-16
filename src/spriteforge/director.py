@@ -169,11 +169,10 @@ def heuristic_decider(prompt: str) -> Plan:
     subject_suffix = "full body, centered, plain white background"
     negative = _SUBJECT_NEGATIVE
     isolate = True
-    if words & _TILE_WORDS:
-        workstream = "environment_tile"
-        enriched = f"{prompt}, top-down view, flat seamless texture, no objects"
-        negative, isolate = "", False
-    elif words & _BLOB_WORDS:
+    # Subject words win over tile words: "a slime on the floor" is a creature,
+    # not a floor tile. Only route to environment_tile when nothing names a
+    # creature/character — real tile prompts ("mossy cobblestone ground") don't.
+    if words & _BLOB_WORDS:
         workstream = "simple_creature"
         enriched = f"a single {prompt}, {subject_suffix}"
     elif words & _QUADRUPED_WORDS:
@@ -183,6 +182,10 @@ def heuristic_decider(prompt: str) -> Plan:
     elif words & _LIMBED_WORDS:
         workstream = "limbed_character"
         enriched = f"a single {prompt}, {subject_suffix}"
+    elif words & _TILE_WORDS:
+        workstream = "environment_tile"
+        enriched = f"{prompt}, top-down view, flat seamless texture, no objects"
+        negative, isolate = "", False
     else:
         workstream = "static_prop"
         enriched = f"a single {prompt}, {subject_suffix}"

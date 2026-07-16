@@ -3,7 +3,49 @@ from __future__ import annotations
 import numpy as np
 from PIL import Image
 
-from spriteforge.isolate import isolate_subject
+from spriteforge.isolate import isolate_subject, strip_cast_shadow
+
+
+def _blob_with_shadow(size=64, shadow=True):
+    """A saturated teal blob with (optionally) a grey cast-shadow band beneath
+    it — the SDXL failure mode. Returns an already-isolated RGBA image."""
+    arr = np.zeros((size, size, 4), dtype=np.uint8)
+    y, x = np.mgrid[0:size, 0:size]
+    body = (x - size / 2) ** 2 + ((y - size * 0.42) / 1.1) ** 2 < (size * 0.30) ** 2
+    arr[body] = (70, 190, 195, 255)                 # saturated teal body
+    if shadow:
+        band = (y >= int(size * 0.80)) & (np.abs(x - size / 2) < size * 0.28)
+        arr[band] = (172, 168, 176, 255)            # desaturated grey shadow
+    return Image.fromarray(arr, "RGBA")
+
+
+def test_strip_cast_shadow_removes_grey_band():
+    before = _blob_with_shadow()
+    out, removed = strip_cast_shadow(before)
+    assert removed > 0
+    a = np.asarray(out)
+    # the grey band is gone...
+    grey_rows = a[int(64 * 0.80):]
+    assert (grey_rows[..., 3] == 0).all() or (grey_rows[..., 3] > 128).sum() == 0
+    # ...but the teal body is kept
+    body = np.asarray(before)
+    kept = (a[..., 3] > 128) & (body[..., :3].sum(axis=-1) > 300)
+    assert kept.sum() > 100
+
+
+def test_strip_cast_shadow_leaves_shadowless_sprite():
+    before = _blob_with_shadow(shadow=False)
+    out, removed = strip_cast_shadow(before)
+    assert removed == 0.0
+    assert np.array_equal(np.asarray(before), np.asarray(out))
+
+
+def test_strip_cast_shadow_spares_greyscale_subject():
+    # a genuinely grey subject must not be eaten (body_chroma guard)
+    arr = np.zeros((64, 64, 4), dtype=np.uint8)
+    arr[20:60, 20:44] = (120, 120, 120, 255)
+    out, removed = strip_cast_shadow(Image.fromarray(arr, "RGBA"))
+    assert removed == 0.0
 
 
 def _subject_on_bg(bg=(250, 250, 250), size=128, eye=True, noise_seed=0):

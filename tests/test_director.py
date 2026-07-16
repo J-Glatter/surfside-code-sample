@@ -43,6 +43,15 @@ def test_heuristic_routing(prompt, expected):
     assert prompt in plan.enriched_prompt
 
 
+def test_heuristic_creature_words_beat_incidental_tile_words():
+    # "floor"/"ground" are tile words, but a named creature must still route to
+    # its creature workstream, not an environment tile
+    assert heuristic_decider("a slime blob on the floor").workstream == "simple_creature"
+    assert heuristic_decider("a wolf standing on grass").workstream == "limbed_character"
+    # a genuine tile (no creature named) still routes to environment_tile
+    assert heuristic_decider("mossy cobblestone ground").workstream == "environment_tile"
+
+
 def test_heuristic_defaults():
     # one 64px logical grid for every workstream (PLAN.md §6)
     assert heuristic_decider("grass texture").size == 64
