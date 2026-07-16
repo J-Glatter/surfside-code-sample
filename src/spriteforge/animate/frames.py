@@ -91,6 +91,9 @@ def build_animation_pipe(
     pipe = pipe.to(device)
     if device != "cuda":
         pipe.enable_attention_slicing()
+    from ..generate import _fix_sdxl_vae
+
+    _fix_sdxl_vae(pipe, be, fp16)
 
     adapters = []
     if use_style_lora:

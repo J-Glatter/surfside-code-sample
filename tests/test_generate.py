@@ -116,6 +116,17 @@ def test_build_pipe_sd15_backend(monkeypatch):
     _, kwargs = fake_diff.StableDiffusionPipeline.from_pretrained.call_args
     assert kwargs["safety_checker"] is None
     sd.load_lora_weights.assert_called_once_with(SD15.pixel_lora)  # autodetect file
+    sd.upcast_vae.assert_not_called()          # SD1.5 VAE is fine in fp16
+
+
+def test_build_pipe_sdxl_fp16_upcasts_vae(monkeypatch):
+    _, _sd, sdxl = _built_pipe(monkeypatch, cuda=True)   # fp16 auto-on for CUDA
+    sdxl.upcast_vae.assert_called_once()       # avoid the black/NaN VAE overflow
+
+
+def test_build_pipe_sdxl_fp32_leaves_vae(monkeypatch):
+    _, _sd, sdxl = _built_pipe(monkeypatch, cuda=False, mps=True)  # fp32 on MPS
+    sdxl.upcast_vae.assert_not_called()
 
 
 def test_build_pipe_mps_defaults(monkeypatch):

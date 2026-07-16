@@ -121,6 +121,15 @@ def build_prompt(prompt: str, use_lora: bool = True,
     return f"{tok}, {prompt}" if use_lora and tok else prompt
 
 
+def _fix_sdxl_vae(pipe, be: Backend, fp16: bool) -> None:
+    """SDXL's VAE overflows in fp16 and can emit black/NaN images — upcast it to
+    fp32. Cheap (a few hundred MB VRAM), no download, and it also silences the
+    'AutoencoderKL should be kept in float32' warning. A black sprite would
+    quietly poison a LoRA training set, so this is worth doing everywhere."""
+    if be.is_xl and fp16 and hasattr(pipe, "upcast_vae"):
+        pipe.upcast_vae()
+
+
 def _load_pixel_lora(pipe, be: Backend) -> None:
     """Load a backend's pixel LoRA, tolerating a shifted weight filename."""
     try:
@@ -170,6 +179,7 @@ def build_pipe(fp16: bool | None = None, use_lora: bool = True,
     pipe = pipe.to(device)
     if device != "cuda":
         pipe.enable_attention_slicing()  # lower peak memory on unified RAM / CPU
+    _fix_sdxl_vae(pipe, be, fp16)
 
     if use_lora:
         if style_lora:
