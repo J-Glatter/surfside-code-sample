@@ -38,11 +38,29 @@ def test_kohya_layout_and_captions(tmp_path):
     config = (out / "kohya_config.toml").read_text()
     assert 'resolution = "1024,1024"' in config
     assert "stable-diffusion-xl-base-1.0" in config
+    assert "no_half_vae = true" in config      # SDXL fp16 VAE would NaN latents
     assert "xformers = true" in config
     assert str(train_dir.resolve()) in config
     notes = (out / "NOTES.md").read_text()
     assert "sks_hero" in notes
     assert "sdxl_train_network.py" in notes
+
+
+def test_small_sprites_nearest_upscaled(tmp_path):
+    # a 64px pixel-art sprite must be NEAREST-upscaled toward the train res so
+    # kohya doesn't bilinear-blur it; NEAREST keeps the colour count tiny
+    p = tmp_path / "sprite.png"
+    arr = np.zeros((64, 64, 4), np.uint8)
+    arr[16:48, 16:48] = (200, 30, 30, 255)
+    Image.fromarray(arr, "RGBA").save(p)
+
+    train_dir = prep_dataset([p], tmp_path / "ds", trigger="t")  # SDXL: res 1024
+
+    out = Image.open(next((train_dir / "10_t").glob("*.png")))
+    assert max(out.size) >= 512                         # upscaled, not left at 64
+    assert out.size[0] % 64 == 0                        # integer factor -> crisp
+    # NEAREST preserves hard edges: only the square + white bg, no blur ramp
+    assert len(out.convert("RGB").getcolors(maxcolors=256)) <= 3
 
 
 def test_sd15_backend_targets_512_base(tmp_path):
@@ -79,8 +97,9 @@ def test_transparency_composited_to_rgb(tmp_path):
 
     img = Image.open(next((train_dir / "10_t").glob("*.png")))
     assert img.mode == "RGB"
+    w, h = img.size                                  # nearest-upscaled from 64px
     assert img.getpixel((0, 0)) == (255, 255, 255)   # bg composited to white
-    assert img.getpixel((32, 32)) == (200, 30, 30)
+    assert img.getpixel((w // 2, h // 2)) == (200, 30, 30)   # centre still red
 
 
 def test_empty_input_rejected(tmp_path):

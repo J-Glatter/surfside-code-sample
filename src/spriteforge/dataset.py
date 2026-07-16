@@ -52,6 +52,9 @@ train_batch_size = 2
 max_train_steps = {max_steps}
 
 mixed_precision = "fp16"
+# SDXL's VAE overflows to NaN in fp16; keep it fp32 so cache_latents doesn't
+# encode your whole dataset into garbage latents at step 0.
+no_half_vae = true
 xformers = true
 cache_latents = true
 gradient_checkpointing = true
@@ -111,9 +114,22 @@ def prep_dataset(
                 (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
                 Image.LANCZOS,
             )
-        # SD trains on RGB: composite any transparency over a flat background
+        # SD trains on RGB: composite any transparency over a flat background.
+        # White is deliberate — it teaches the LoRA plain-background subjects,
+        # which our isolate step then strips.
         rgb = Image.new("RGB", img.size, background)
         rgb.paste(img, mask=img.getchannel("A"))
+
+        # Pixel-art sprites are tiny (64px). NEAREST-upscale them toward the
+        # train resolution so hard pixel edges survive — kohya would otherwise
+        # bilinear-upscale a 64px image into a blurry blob and teach the LoRA
+        # mush. Integer factor keeps the grid exact.
+        longest = max(rgb.size)
+        if longest < resolution:
+            factor = max(1, resolution // longest)
+            if factor > 1:
+                rgb = rgb.resize((rgb.width * factor, rgb.height * factor),
+                                 Image.NEAREST)
 
         stem = f"{i:04d}"
         rgb.save(dest / f"{stem}.png")
