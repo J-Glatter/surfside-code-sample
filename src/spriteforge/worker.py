@@ -55,13 +55,15 @@ def process_job(
     pipe,
     palette=None,
     offline: bool = False,
+    backend=None,
 ) -> JobResult:
     """Execute one job file; move it and its outputs to done/ or failed/."""
     name = path.stem
     try:
         plan, seed = _load_job(path, offline)
         out_dir = jobs_dir / "done" / name
-        results = execute_plan(plan, out_dir, palette=palette, seed=seed, pipe=pipe)
+        results = execute_plan(plan, out_dir, palette=palette, seed=seed,
+                               pipe=pipe, backend=backend)
         (out_dir / "status.json").write_text(json.dumps(
             {"status": "done", "plan": json.loads(plan.to_json()),
              "seed": seed,
@@ -92,6 +94,7 @@ def run_worker(
     offline: bool = False,
     pipe_factory=None,
     once: bool = False,
+    backend=None,
 ) -> list[JobResult]:
     """The worker loop. `pipe_factory` is injectable for tests; by default the
     SD pipeline is built lazily on the first job and reused (kept warm)."""
@@ -115,9 +118,10 @@ def run_worker(
                 else:
                     from .generate import build_pipe
 
-                    pipe = build_pipe()  # built once, kept warm across jobs
+                    # built once, kept warm across jobs
+                    pipe = build_pipe(backend=backend)
             result = process_job(path, jobs_dir, pipe,
-                                 palette=palette, offline=offline)
+                                 palette=palette, offline=offline, backend=backend)
             print(f"worker: {result.name} -> {result.status}"
                   + (f" ({result.error})" if result.error else ""))
             results.append(result)

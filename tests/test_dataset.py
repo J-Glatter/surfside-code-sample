@@ -31,15 +31,30 @@ def test_kohya_layout_and_captions(tmp_path):
     txts = sorted(folder.glob("*.txt"))
     assert len(pngs) == len(txts) == 3
     assert txts[0].read_text() == "sks_hero, character\n"
-    # images capped at 512 on the longest side
+    # default backend is SDXL: images capped at 1024 on the longest side
     for p in pngs:
-        assert max(Image.open(p).size) <= 512
-    # config + notes emitted
+        assert max(Image.open(p).size) <= 1024
+    # config + notes emitted, targeting the SDXL base + train script
     config = (out / "kohya_config.toml").read_text()
-    assert 'resolution = "512,512"' in config
+    assert 'resolution = "1024,1024"' in config
+    assert "stable-diffusion-xl-base-1.0" in config
     assert "xformers = true" in config
     assert str(train_dir.resolve()) in config
-    assert "sks_hero" in (out / "NOTES.md").read_text()
+    notes = (out / "NOTES.md").read_text()
+    assert "sks_hero" in notes
+    assert "sdxl_train_network.py" in notes
+
+
+def test_sd15_backend_targets_512_base(tmp_path):
+    srcs = _make_images(tmp_path)
+    out = tmp_path / "ds"
+
+    for p in prep_dataset(srcs, out, trigger="t", backend="sd15").glob("**/*.png"):
+        assert max(Image.open(p).size) <= 512
+    config = (out / "kohya_config.toml").read_text()
+    assert 'resolution = "512,512"' in config
+    assert "stable-diffusion-v1-5" in config
+    assert "train_network.py" in (out / "NOTES.md").read_text()
 
 
 def test_sidecar_captions_are_appended(tmp_path):

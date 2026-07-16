@@ -1,23 +1,89 @@
-"""Stage 1 — text prompt -> raw 512px render via Stable Diffusion 1.5 + pixel LoRA.
+"""Stage 1 — text prompt -> raw render via a diffusion backend + pixel LoRA.
 
-Ported from reference/generate.py (proven Phase-0 code) with one upgrade per
-PLAN.md §6: device auto-detect is now CUDA -> MPS -> CPU (the RTX 3080 box is the
-generation workhorse; the original was MPS-first for the Mac), with fp16 the
-default on CUDA and fp32 the safe default on MPS.
+Two backends (Checkpoint A/B bake-off finding — SDXL wins decisively):
+
+  * sdxl (default): SDXL base + nerijs/pixel-art-xl. Coherent single subjects,
+    real pixel grid, far less baked-in scenery than SD1.5. The A40/3080 run it
+    comfortably. Native 1024px (downscaled to the 64px grid afterwards).
+  * sd15: the original SD1.5 + PixArFK LoRA, kept reachable behind --sd15 —
+    lighter, faster, and the only one with a proven quadruped openpose
+    ControlNet today.
 
 torch/diffusers are imported lazily so the CPU core of the package installs and
-runs without the `[generate]` extra. First real run downloads the model (~4 GB)
-into ~/.cache/huggingface.
+runs without the `[generate]` extra. First real run downloads the model (SDXL
+~7 GB, SD1.5 ~4 GB) into HF_HOME.
 """
 
 from __future__ import annotations
 
-# ---- Model choices that resolve on Hugging Face today -----------------------
-# The old runwayml/stable-diffusion-v1-5 repo is deprecated; this is the rehost.
-BASE_MODEL = "stable-diffusion-v1-5/stable-diffusion-v1-5"
-# SD 1.5 pixel-art LoRA. Trigger tokens: "pixel art, PixArFK".
-PIXEL_LORA = "artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5"
-LORA_TRIGGER = "pixel art, PixArFK"
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Backend:
+    """A generation backend: base model, its pixel LoRA, and matching ControlNets."""
+
+    name: str
+    base_model: str
+    pixel_lora: str
+    lora_weight_name: str | None   # explicit safetensors file, or None to autodetect
+    lora_trigger: str              # tokens appended to every prompt
+    size: int                      # native generation resolution (square)
+    is_xl: bool                    # SDXL pipelines differ from SD1.5
+    controlnet_openpose: str
+    controlnet_animal: str | None  # quadruped rig; None where none is proven yet
+    train_script: str              # kohya sd-scripts entrypoint for this base
+
+
+SDXL = Backend(
+    name="sdxl",
+    base_model="stabilityai/stable-diffusion-xl-base-1.0",
+    pixel_lora="nerijs/pixel-art-xl",
+    lora_weight_name="pixel-art-xl.safetensors",
+    lora_trigger="pixel art",
+    size=1024,
+    is_xl=True,
+    controlnet_openpose="xinsir/controlnet-openpose-sdxl-1.0",
+    controlnet_animal=None,        # no proven SDXL animal-openpose yet — see frames.py
+    train_script="sdxl_train_network.py",
+)
+
+SD15 = Backend(
+    name="sd15",
+    # The old runwayml/stable-diffusion-v1-5 repo is deprecated; this is the rehost.
+    base_model="stable-diffusion-v1-5/stable-diffusion-v1-5",
+    pixel_lora="artificialguybr/pixelartredmond-1-5v-pixel-art-loras-for-sd-1-5",
+    lora_weight_name=None,
+    lora_trigger="pixel art, PixArFK",
+    size=512,
+    is_xl=False,
+    controlnet_openpose="lllyasviel/sd-controlnet-openpose",
+    controlnet_animal="crishhh/animal_openpose",
+    train_script="train_network.py",
+)
+
+BACKENDS = {SDXL.name: SDXL, SD15.name: SD15}
+DEFAULT_BACKEND = "sdxl"
+
+
+def get_backend(backend: str | Backend | None) -> Backend:
+    """Resolve a backend name (or pass one through); None -> the default (SDXL)."""
+    if isinstance(backend, Backend):
+        return backend
+    if backend is None:
+        return BACKENDS[DEFAULT_BACKEND]
+    try:
+        return BACKENDS[backend]
+    except KeyError:
+        raise ValueError(
+            f"unknown backend {backend!r} (choose from {sorted(BACKENDS)})"
+        ) from None
+
+
+# Back-compat module aliases resolve to the default backend. Prefer get_backend().
+BASE_MODEL = BACKENDS[DEFAULT_BACKEND].base_model
+PIXEL_LORA = BACKENDS[DEFAULT_BACKEND].pixel_lora
+LORA_TRIGGER = BACKENDS[DEFAULT_BACKEND].lora_trigger
 
 DEFAULT_NEGATIVE = "3d render, realistic, photo, blurry, jpeg artifacts, smooth shading"
 DEFAULT_STEPS = 28
@@ -40,29 +106,53 @@ def default_fp16(device: str) -> bool:
     return device == "cuda"
 
 
-def build_prompt(prompt: str, use_lora: bool = True) -> str:
-    """Append the LoRA trigger tokens when the pixel LoRA is active."""
-    return f"{prompt}, {LORA_TRIGGER}" if use_lora else prompt
+def build_prompt(prompt: str, use_lora: bool = True,
+                 backend: str | Backend | None = None) -> str:
+    """Append the active backend's LoRA trigger tokens when the pixel LoRA is on."""
+    trigger = get_backend(backend).lora_trigger
+    return f"{prompt}, {trigger}" if use_lora else prompt
 
 
-def build_pipe(fp16: bool | None = None, use_lora: bool = True, device: str | None = None):
-    """Assemble the SD 1.5 pipeline on the best available device.
+def _load_pixel_lora(pipe, be: Backend) -> None:
+    """Load a backend's pixel LoRA, tolerating a shifted weight filename."""
+    try:
+        if be.lora_weight_name:
+            pipe.load_lora_weights(be.pixel_lora, weight_name=be.lora_weight_name)
+        else:
+            pipe.load_lora_weights(be.pixel_lora)
+        print(f"loaded LoRA: {be.pixel_lora}")
+    except Exception as e:  # noqa: BLE001
+        print(f"couldn't load LoRA ({e}). Continuing base-model only.\n"
+              f"If it's a filename issue, check weight_name for {be.pixel_lora}.")
+
+
+def build_pipe(fp16: bool | None = None, use_lora: bool = True,
+               device: str | None = None, backend: str | Backend | None = None):
+    """Assemble the pipeline for the chosen backend on the best available device.
 
     fp16=None means auto: fp16 on CUDA, fp32 elsewhere.
     """
     import torch
-    from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
+    from diffusers import DPMSolverMultistepScheduler
 
+    be = get_backend(backend)
     device = device or pick_device()
     if device == "cpu":
         print("WARNING: no GPU available — falling back to CPU (very slow).")
     if fp16 is None:
         fp16 = default_fp16(device)
-
     dtype = torch.float16 if fp16 else torch.float32
-    pipe = StableDiffusionPipeline.from_pretrained(
-        BASE_MODEL, torch_dtype=dtype, safety_checker=None
-    )
+
+    if be.is_xl:
+        from diffusers import StableDiffusionXLPipeline
+
+        pipe = StableDiffusionXLPipeline.from_pretrained(
+            be.base_model, torch_dtype=dtype)
+    else:
+        from diffusers import StableDiffusionPipeline
+
+        pipe = StableDiffusionPipeline.from_pretrained(
+            be.base_model, torch_dtype=dtype, safety_checker=None)
     # DPM++ gives good results in few steps.
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
     pipe = pipe.to(device)
@@ -70,12 +160,7 @@ def build_pipe(fp16: bool | None = None, use_lora: bool = True, device: str | No
         pipe.enable_attention_slicing()  # lower peak memory on unified RAM / CPU
 
     if use_lora:
-        try:
-            pipe.load_lora_weights(PIXEL_LORA)
-            print(f"loaded LoRA: {PIXEL_LORA}")
-        except Exception as e:  # noqa: BLE001
-            print(f"couldn't load LoRA ({e}). Continuing base-model only.\n"
-                  f"If it's a filename issue, pass weight_name= to load_lora_weights.")
+        _load_pixel_lora(pipe, be)
     return pipe
 
 
@@ -87,11 +172,18 @@ def generate(
     guidance: float = DEFAULT_GUIDANCE,
     seed: int | None = None,
     use_lora: bool = True,
+    backend: str | Backend | None = None,
+    size: int | None = None,
 ):
-    """Run the pipeline once; returns the raw 512px PIL image (pre-pixelize)."""
+    """Run the pipeline once; returns the raw PIL image (pre-pixelize).
+
+    `size` defaults to the backend's native resolution (SDXL 1024, SD1.5 512).
+    """
     import torch
 
-    full_prompt = build_prompt(prompt, use_lora)
+    be = get_backend(backend)
+    full_prompt = build_prompt(prompt, use_lora, backend=be)
+    dim = size or be.size
     generator = None
     if seed is not None:
         # CPU generator keeps seeds reproducible across devices.
@@ -101,8 +193,8 @@ def generate(
         negative_prompt=negative,
         num_inference_steps=steps,
         guidance_scale=guidance,
-        width=512,
-        height=512,
+        width=dim,
+        height=dim,
         generator=generator,
     ).images[0]
     return image

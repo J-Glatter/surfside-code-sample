@@ -28,6 +28,11 @@ def _add_common_output_args(p: argparse.ArgumentParser, default_output: str) -> 
                    help="also save an Nx nearest-neighbour preview (0 = off)")
 
 
+def _backend(a: argparse.Namespace) -> str | None:
+    """--sd15 selects the SD1.5 backend; default (None) is SDXL + pixel-art-xl."""
+    return "sd15" if getattr(a, "sd15", False) else None
+
+
 def _load_palette(a: argparse.Namespace):
     if a.palette is None:
         return None
@@ -81,7 +86,8 @@ def _cmd_generate(a: argparse.Namespace) -> None:
 
     fp16 = True if a.fp16 else False if a.fp32 else None  # None = auto per device
     use_lora = not a.no_lora
-    pipe = build_pipe(fp16=fp16, use_lora=use_lora)
+    be = _backend(a)
+    pipe = build_pipe(fp16=fp16, use_lora=use_lora, backend=be)
     if a.tile:
         from .tiling import enable_tiling
 
@@ -89,7 +95,7 @@ def _cmd_generate(a: argparse.Namespace) -> None:
         print(f"seamless tiling on ({patched} conv layers wrapped)")
     print("generating...")
     raw = generate(pipe, a.prompt, negative=a.negative, steps=a.steps,
-                   guidance=a.guidance, seed=a.seed, use_lora=use_lora)
+                   guidance=a.guidance, seed=a.seed, use_lora=use_lora, backend=be)
     if a.raw:
         raw_out = _png_path(a.raw, default_name="raw.png")
         raw.save(raw_out)
@@ -123,7 +129,7 @@ def _cmd_dataset_prep(a: argparse.Namespace) -> None:
 
     train_dir = prep_dataset(a.images, a.output, trigger=a.trigger,
                              repeats=a.repeats, class_word=a.class_word,
-                             name=a.name)
+                             name=a.name, backend=_backend(a))
     print(f"kohya dataset ready: {train_dir}")
     print(f"see {a.output}/NOTES.md for the training command")
 
@@ -135,12 +141,13 @@ def _cmd_refine(a: argparse.Namespace) -> None:
     from .refine import build_img2img_pipe, refine
 
     fp16 = True if a.fp16 else False if a.fp32 else None
-    pipe = build_img2img_pipe(fp16=fp16, character_lora=a.character_lora)
+    be = _backend(a)
+    pipe = build_img2img_pipe(fp16=fp16, character_lora=a.character_lora, backend=be)
     hero = Image.open(a.hero)
     print("refining...")
     written = refine(pipe, hero, a.prompt, a.output,
                      per_variation=a.per_variation, strength=a.strength,
-                     seed=a.seed)
+                     seed=a.seed, backend=be)
     print(f"wrote {len(written)} candidates to {a.output}")
 
 
@@ -175,13 +182,14 @@ def _cmd_skeleton(a: argparse.Namespace) -> None:
 
 def _cmd_animate(a: argparse.Namespace) -> None:
     # Lazy: needs the [animate] extra — GPU boxes only.
-    from .animate.frames import CONTROLNET_BY_BODY, build_animation_pipe
+    from .animate.frames import build_animation_pipe, controlnet_for
     from .animate.pipeline import animate_action
 
     fp16 = True if a.fp16 else False if a.fp32 else None
-    controlnet = a.controlnet or CONTROLNET_BY_BODY[a.body]
+    be = _backend(a)
+    controlnet = a.controlnet or controlnet_for(a.body, be)
     pipe = build_animation_pipe(character_lora=a.character_lora, fp16=fp16,
-                                controlnet_model=controlnet)
+                                controlnet_model=controlnet, backend=be, body=a.body)
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
     print(f"animating {a.body} {a.action}: {a.frames or 'default'} frames x "
@@ -190,7 +198,7 @@ def _cmd_animate(a: argparse.Namespace) -> None:
         pipe, a.action, a.prompt,
         size=a.size, colors=a.colors, palette=_load_palette(a),
         frames=a.frames, n_candidates=a.candidates, seed=a.seed,
-        raw_dir=a.raw_dir, body=a.body,
+        raw_dir=a.raw_dir, body=a.body, backend=be,
     )
     for k, frame in enumerate(locked):
         frame.save(out / f"{a.action}_{k:02d}.png")
@@ -247,7 +255,7 @@ def _cmd_make(a: argparse.Namespace) -> None:
     fp16 = True if a.fp16 else False if a.fp32 else None
     results = execute_plan(plan, a.output, palette=_load_palette(a),
                            seed=a.seed, fp16=fp16,
-                           candidates=a.candidates, pick=a.pick)
+                           candidates=a.candidates, pick=a.pick, backend=_backend(a))
     for key, value in results.items():
         if isinstance(value, list):
             value = ", ".join(str(v) for v in value)
@@ -259,7 +267,7 @@ def _cmd_worker(a: argparse.Namespace) -> None:
     from .worker import run_worker
 
     run_worker(a.jobs_dir, poll=a.poll, palette=_load_palette(a),
-               offline=a.offline, once=a.once)
+               offline=a.offline, once=a.once, backend=_backend(a))
 
 
 def _cmd_preview(a: argparse.Namespace) -> None:
@@ -316,6 +324,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--isolate", action="store_true",
                        help="strip a plain background to transparency (prompt for "
                             "'isolated on a plain white background' too)")
+    p_gen.add_argument("--sd15", action="store_true",
+                       help="use the SD1.5 backend instead of the default SDXL")
     p_gen.set_defaults(func=_cmd_generate)
 
     p_pal = sub.add_parser("palette", help="create and inspect locked palettes")
@@ -350,6 +360,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_prep.add_argument("--class-word", default=None,
                         help='optional class word, e.g. "character"')
     p_prep.add_argument("--name", default=None, help="LoRA output name")
+    p_prep.add_argument("--sd15", action="store_true",
+                        help="target the SD1.5 base for training (default SDXL)")
     p_prep.set_defaults(func=_cmd_dataset_prep)
 
     p_ref = sub.add_parser(
@@ -368,6 +380,8 @@ def build_parser() -> argparse.ArgumentParser:
     ref_fp = p_ref.add_mutually_exclusive_group()
     ref_fp.add_argument("--fp16", action="store_true")
     ref_fp.add_argument("--fp32", action="store_true")
+    p_ref.add_argument("--sd15", action="store_true",
+                       help="use the SD1.5 backend instead of the default SDXL")
     p_ref.set_defaults(func=_cmd_refine)
 
     p_cur = sub.add_parser(
@@ -415,6 +429,9 @@ def build_parser() -> argparse.ArgumentParser:
     anim_fp = p_anim.add_mutually_exclusive_group()
     anim_fp.add_argument("--fp16", action="store_true")
     anim_fp.add_argument("--fp32", action="store_true")
+    p_anim.add_argument("--sd15", action="store_true",
+                        help="use the SD1.5 backend (the only one with a proven "
+                             "quadruped openpose ControlNet today)")
     p_anim.set_defaults(func=_cmd_animate)
 
     p_sheet = sub.add_parser("sheet", help="pack frame dirs into a sprite sheet")
@@ -462,6 +479,8 @@ def build_parser() -> argparse.ArgumentParser:
     make_fp = p_make.add_mutually_exclusive_group()
     make_fp.add_argument("--fp16", action="store_true")
     make_fp.add_argument("--fp32", action="store_true")
+    p_make.add_argument("--sd15", action="store_true",
+                        help="use the SD1.5 backend instead of the default SDXL")
     p_make.set_defaults(func=_cmd_make)
 
     p_work = sub.add_parser(
@@ -476,6 +495,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="plan .txt jobs with heuristics, never the LLM")
     p_work.add_argument("--once", action="store_true",
                         help="process what's pending, then exit")
+    p_work.add_argument("--sd15", action="store_true",
+                        help="use the SD1.5 backend instead of the default SDXL")
     p_work.set_defaults(func=_cmd_worker)
 
     return parser

@@ -45,7 +45,7 @@ python3 -c "import torch; print('cuda:', torch.cuda.is_available(),
 spriteforge --help | head -3
 
 if [ "${RUN_SMOKE:-0}" = "1" ]; then
-    echo "== smoke test (downloads ~4 GB of SD weights on first run) =="
+    echo "== smoke test (downloads ~7 GB of SDXL weights on first run) =="
     spriteforge make "a small slime monster" -o "$BASE/smoke" --offline
     ls -la "$BASE/smoke"
 fi

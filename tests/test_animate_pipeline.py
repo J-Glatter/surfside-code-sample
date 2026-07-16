@@ -83,30 +83,64 @@ def test_animate_unknown_action(monkeypatch):
         assert "fly" in str(e)
 
 
-def test_build_animation_pipe_wiring(monkeypatch):
+def _fake_controlnet_diffusers(pipe):
     import types
 
-    from spriteforge.animate import frames as frames_mod
-
-    fake_torch = fake_torch_module(cuda=True)
     fake_diff = types.ModuleType("diffusers")
-    pipe = MagicMock(name="pipe")
-    pipe.to.return_value = pipe
     fake_diff.StableDiffusionControlNetPipeline = MagicMock()
     fake_diff.StableDiffusionControlNetPipeline.from_pretrained.return_value = pipe
+    fake_diff.StableDiffusionXLControlNetPipeline = MagicMock()
+    fake_diff.StableDiffusionXLControlNetPipeline.from_pretrained.return_value = pipe
     fake_diff.ControlNetModel = MagicMock()
     fake_diff.DPMSolverMultistepScheduler = MagicMock()
-    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    return fake_diff
+
+
+def test_build_animation_pipe_wiring_sdxl(monkeypatch):
+    from spriteforge.animate import frames as frames_mod
+    from spriteforge.generate import SDXL
+
+    pipe = MagicMock(name="pipe")
+    pipe.to.return_value = pipe
+    fake_diff = _fake_controlnet_diffusers(pipe)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module(cuda=True))
     monkeypatch.setitem(sys.modules, "diffusers", fake_diff)
 
     out = frames_mod.build_animation_pipe(character_lora="hero.safetensors")
 
     assert out is pipe
-    fake_diff.ControlNetModel.from_pretrained.assert_called_once()
+    # default backend uses the SDXL controlnet pipeline + xinsir openpose
+    fake_diff.StableDiffusionControlNetPipeline.from_pretrained.assert_not_called()
     args, _ = fake_diff.ControlNetModel.from_pretrained.call_args
-    assert args[0] == frames_mod.CONTROLNET_OPENPOSE
-    # both LoRAs stacked
+    assert args[0] == SDXL.controlnet_openpose
     names = [kw.get("adapter_name")
              for _, kw in pipe.load_lora_weights.call_args_list]
     assert names == ["pixel", "character"]
     pipe.set_adapters.assert_called_once_with(["pixel", "character"], [1.0, 1.0])
+
+
+def test_build_animation_pipe_wiring_sd15(monkeypatch):
+    from spriteforge.animate import frames as frames_mod
+
+    pipe = MagicMock(name="pipe")
+    pipe.to.return_value = pipe
+    fake_diff = _fake_controlnet_diffusers(pipe)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module(cuda=True))
+    monkeypatch.setitem(sys.modules, "diffusers", fake_diff)
+
+    frames_mod.build_animation_pipe(backend="sd15")
+
+    fake_diff.StableDiffusionXLControlNetPipeline.from_pretrained.assert_not_called()
+    args, _ = fake_diff.ControlNetModel.from_pretrained.call_args
+    assert args[0] == frames_mod.CONTROLNET_OPENPOSE   # lllyasviel SD1.5
+
+
+def test_controlnet_for_quadruped_needs_sd15():
+    import pytest
+
+    from spriteforge.animate.frames import controlnet_for
+
+    # no proven SDXL animal-openpose yet -> explicit error, not silent wrong pose
+    with pytest.raises(ValueError):
+        controlnet_for("quadruped")
+    assert controlnet_for("quadruped", "sd15") == "crishhh/animal_openpose"

@@ -9,14 +9,18 @@ Do them in order — each gates the next stage of the pipeline.
 git clone https://github.com/J-Glatter/surfside-code-sample && cd surfside-code-sample
 pip install -e ".[generate,director,isolate]"
 
+# Backend: SDXL + nerijs/pixel-art-xl is the DEFAULT (bake-off winner — far more
+# coherent single subjects and far less baked-in scenery than SD1.5). Pass
+# --sd15 anywhere to fall back to the lighter SD1.5 + PixArFK stack (the only
+# backend with a proven quadruped openpose ControlNet today).
+#
 # Let the director art-direct the prompt. A terse brief ("a small slime
-# monster") gives SD nothing to draw and yields a featureless blob, so the LLM
-# director expands it into a concrete visual description (material, colour,
-# features, expression) and forbids pedestals/shadows the isolator can't strip.
-# Set the key to enable it (~1c/asset); without it the keyword heuristic runs
-# and still hardens composition, just without per-subject detail.
+# monster") gives the model little to draw, so the LLM director expands it into
+# a concrete visual description (material, colour, features, expression) and
+# forbids pedestals/shadows the isolator can't strip. Set the key to enable it
+# (~1c/asset); without it the keyword heuristic still hardens composition.
 export ANTHROPIC_API_KEY=sk-ant-...     # optional but recommended for creatures
-spriteforge make "a small slime monster" -o out/slime     # plan -> gen -> pixelize -> animate
+spriteforge make "a small slime monster" -o out/slime --candidates 8   # best-of-8
 
 # 1. CUDA path + basic generation (first run downloads ~4 GB)
 #    Prompt for a plain white background and use --isolate so the sprite gets

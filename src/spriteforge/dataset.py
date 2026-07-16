@@ -19,19 +19,24 @@ from pathlib import Path
 
 from PIL import Image
 
-TRAIN_RESOLUTION = 512  # train at 512 — output is tiny sprites, no reason to go bigger
+from .generate import get_backend
+
+# A character/style LoRA must be trained against the base it will stack on, so
+# resolution and the sd-scripts entrypoint follow the active backend (SDXL 1024
+# / sdxl_train_network.py; SD1.5 512 / train_network.py).
 
 _KOHYA_CONFIG = """\
-# kohya_ss (sd-scripts train_network.py) template — SD 1.5 LoRA on 10-12 GB VRAM.
-# Speed levers per the project handover: 512px, xformers, fp16, modest steps.
-# Verify paths before launching.
+# kohya_ss (sd-scripts {train_script}) template for a {backend} LoRA.
+# Speed levers per the project handover: xformers, fp16, modest steps. SDXL LoRA
+# training at 1024px wants ~16-24 GB VRAM (the A40 is comfortable; a 10 GB card
+# is not) — drop to --sd15 to train on smaller hardware. Verify paths first.
 
-pretrained_model_name_or_path = "stable-diffusion-v1-5/stable-diffusion-v1-5"
+pretrained_model_name_or_path = "{base_model}"
 train_data_dir = "{train_data_dir}"
 output_dir = "{output_dir}"
 output_name = "{name}"
 
-resolution = "512,512"
+resolution = "{resolution},{resolution}"
 enable_bucket = true
 
 network_module = "networks.lora"
@@ -60,9 +65,9 @@ _NOTES = """\
 
 Dataset: {n_images} images x {repeats} repeats, trigger token: `{trigger}`
 
-On the 3080 box (kohya_ss checkout, venv active):
+On the GPU box (kohya_ss checkout, venv active):
 
-    accelerate launch train_network.py --config_file {config_path}
+    accelerate launch {train_script} --config_file {config_path}
 
 Expected wall clock: ~30-45 min. Result: {name}.safetensors in `{output_dir}` —
 a few MB, stackable with the pixel-art style LoRA.
@@ -78,15 +83,18 @@ def prep_dataset(
     trigger: str,
     repeats: int = 10,
     class_word: str | None = None,
-    resolution: int = TRAIN_RESOLUTION,
+    resolution: int | None = None,
     name: str | None = None,
     background: tuple[int, int, int] = (255, 255, 255),
+    backend=None,
 ) -> Path:
     """Build a kohya-ready dataset directory. Returns the img/ train_data_dir.
 
     Caption per image: "<trigger>[, <class_word>][, <sidecar text>]" where the
     sidecar is an optional `<image>.txt` next to the source file.
     """
+    be = get_backend(backend)
+    resolution = resolution or be.size
     out_dir = Path(out_dir)
     name = name or trigger
     train_root = out_dir / "img"
@@ -132,6 +140,10 @@ def prep_dataset(
         output_dir=(out_dir / "output").resolve(),
         name=name,
         max_steps=max_steps,
+        backend=be.name,
+        base_model=be.base_model,
+        resolution=resolution,
+        train_script=be.train_script,
     ))
     (out_dir / "NOTES.md").write_text(_NOTES.format(
         name=name,
@@ -140,6 +152,7 @@ def prep_dataset(
         trigger=trigger,
         config_path=(out_dir / "kohya_config.toml").resolve(),
         output_dir=(out_dir / "output").resolve(),
+        train_script=be.train_script,
     ))
     (out_dir / "output").mkdir(exist_ok=True)
     return train_root

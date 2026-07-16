@@ -17,11 +17,10 @@ from pathlib import Path
 from PIL import Image
 
 from .generate import (
-    BASE_MODEL,
     DEFAULT_NEGATIVE,
-    PIXEL_LORA,
     build_prompt,
     default_fp16,
+    get_backend,
     pick_device,
 )
 
@@ -47,11 +46,14 @@ def build_img2img_pipe(
     use_lora: bool = True,
     device: str | None = None,
     character_lora: str | None = None,
+    backend=None,
 ):
-    """SD 1.5 img2img pipeline; optionally stacks a character LoRA on the style LoRA."""
+    """img2img pipeline for the chosen backend; optionally stacks a character
+    LoRA on the style LoRA."""
     import torch
-    from diffusers import DPMSolverMultistepScheduler, StableDiffusionImg2ImgPipeline
+    from diffusers import DPMSolverMultistepScheduler
 
+    be = get_backend(backend)
     device = device or pick_device()
     if device == "cpu":
         print("WARNING: no GPU available — falling back to CPU (very slow).")
@@ -59,9 +61,16 @@ def build_img2img_pipe(
         fp16 = default_fp16(device)
 
     dtype = torch.float16 if fp16 else torch.float32
-    pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
-        BASE_MODEL, torch_dtype=dtype, safety_checker=None
-    )
+    if be.is_xl:
+        from diffusers import StableDiffusionXLImg2ImgPipeline
+
+        pipe = StableDiffusionXLImg2ImgPipeline.from_pretrained(
+            be.base_model, torch_dtype=dtype)
+    else:
+        from diffusers import StableDiffusionImg2ImgPipeline
+
+        pipe = StableDiffusionImg2ImgPipeline.from_pretrained(
+            be.base_model, torch_dtype=dtype, safety_checker=None)
     pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config)
     pipe = pipe.to(device)
     if device != "cuda":
@@ -70,7 +79,11 @@ def build_img2img_pipe(
     adapters = []
     if use_lora:
         try:
-            pipe.load_lora_weights(PIXEL_LORA, adapter_name="pixel")
+            if be.lora_weight_name:
+                pipe.load_lora_weights(be.pixel_lora, weight_name=be.lora_weight_name,
+                                       adapter_name="pixel")
+            else:
+                pipe.load_lora_weights(be.pixel_lora, adapter_name="pixel")
             adapters.append("pixel")
         except Exception as e:  # noqa: BLE001
             print(f"couldn't load style LoRA ({e}). Continuing without it.")
@@ -113,18 +126,20 @@ def refine(
     negative: str = DEFAULT_NEGATIVE,
     seed: int = 0,
     use_lora: bool = True,
+    backend=None,
 ) -> list[Path]:
     """Batch img2img from the hero. Deterministic filenames and seeds."""
     import torch
 
+    be = get_backend(backend)
     variations = variations if variations is not None else DEFAULT_VARIATIONS
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    anchor = fit_canvas(hero)
+    anchor = fit_canvas(hero, canvas=be.size)
 
     written = []
     for i, variation in enumerate(variations):
-        prompt = build_prompt(f"{base_prompt}, {variation}", use_lora)
+        prompt = build_prompt(f"{base_prompt}, {variation}", use_lora, backend=be)
         for j in range(per_variation):
             gen = torch.Generator(device="cpu").manual_seed(seed + i * 1000 + j)
             image = pipe(
