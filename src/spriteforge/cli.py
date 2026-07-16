@@ -191,7 +191,8 @@ def _cmd_animate(a: argparse.Namespace) -> None:
     be = _backend(a)
     controlnet = a.controlnet or controlnet_for(a.body, be)
     pipe = build_animation_pipe(character_lora=a.character_lora, fp16=fp16,
-                                controlnet_model=controlnet, backend=be, body=a.body)
+                                controlnet_model=controlnet, backend=be, body=a.body,
+                                style_lora=a.style_lora)
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
     print(f"animating {a.body} {a.action}: {a.frames or 'default'} frames x "
@@ -200,7 +201,7 @@ def _cmd_animate(a: argparse.Namespace) -> None:
         pipe, a.action, a.prompt,
         size=a.size, colors=a.colors, palette=_load_palette(a),
         frames=a.frames, n_candidates=a.candidates, seed=a.seed,
-        raw_dir=a.raw_dir, body=a.body, backend=be,
+        raw_dir=a.raw_dir, body=a.body, backend=be, trigger=a.style_trigger,
     )
     for k, frame in enumerate(locked):
         frame.save(out / f"{a.action}_{k:02d}.png")
@@ -447,6 +448,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_anim.add_argument("--sd15", action="store_true",
                         help="use the SD1.5 backend (the only one with a proven "
                              "quadruped openpose ControlNet today)")
+    p_anim.add_argument("--style-lora", default=None, metavar="PATH_OR_ID",
+                        help="trained style LoRA for the frames (Checkpoint C)")
+    p_anim.add_argument("--style-trigger", default=None, metavar="TOKEN")
     p_anim.set_defaults(func=_cmd_animate)
 
     p_sheet = sub.add_parser("sheet", help="pack frame dirs into a sprite sheet")

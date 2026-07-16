@@ -53,6 +53,7 @@ def animate_action(
     raw_dir: str | Path | None = None,
     body: str = "humanoid",
     backend=None,
+    trigger: str | None = None,
 ) -> tuple[list[Image.Image], Selection]:
     """Generate one animated action. Returns (locked pixelized frames, selection).
 
@@ -74,6 +75,7 @@ def animate_action(
             n=n_candidates, steps=steps, guidance=guidance,
             controlnet_scale=controlnet_scale,
             base_seed=seed + k * 10_000, use_lora=use_lora, backend=backend,
+            trigger=trigger,
         )
         if raw_dir is not None:
             d = Path(raw_dir) / f"{action}_{k:02d}"

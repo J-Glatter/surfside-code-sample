@@ -135,6 +135,23 @@ def test_build_animation_pipe_wiring_sd15(monkeypatch):
     assert args[0] == frames_mod.CONTROLNET_OPENPOSE   # lllyasviel SD1.5
 
 
+def test_build_animation_pipe_custom_style_lora(monkeypatch):
+    from spriteforge.animate import frames as frames_mod
+
+    pipe = MagicMock(name="pipe")
+    pipe.to.return_value = pipe
+    fake_diff = _fake_controlnet_diffusers(pipe)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module(cuda=True))
+    monkeypatch.setitem(sys.modules, "diffusers", fake_diff)
+
+    frames_mod.build_animation_pipe(style_lora="/w/myworld.safetensors")
+
+    # the trained style LoRA replaces the stock pixel LoRA as the "pixel" adapter
+    calls = {kw.get("adapter_name"): args
+             for args, kw in pipe.load_lora_weights.call_args_list}
+    assert calls["pixel"] == ("/w/myworld.safetensors",)
+
+
 def test_controlnet_for_quadruped_needs_sd15():
     import pytest
 

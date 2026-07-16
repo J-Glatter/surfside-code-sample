@@ -57,15 +57,24 @@ def build_animation_pipe(
     controlnet_model: str | None = None,
     backend=None,
     body: str = "humanoid",
+    style_lora: str | None = None,
 ):
     """Base model + a pose ControlNet, with style/character LoRAs stacked.
 
     `controlnet_model` overrides the backend/body default when given.
+    `style_lora` (or $SPRITEFORGE_STYLE_LORA) replaces the stock pixel LoRA, so
+    animated frames match a world trained at Checkpoint C.
     """
+    import os
+
     import torch
     from diffusers import ControlNetModel, DPMSolverMultistepScheduler
 
+    from ..generate import ENV_STYLE_LORA
+
     be = get_backend(backend)
+    if style_lora is None:
+        style_lora = os.environ.get(ENV_STYLE_LORA) or None
     device = device or pick_device()
     if device == "cpu":
         print("WARNING: no GPU available — falling back to CPU (very slow).")
@@ -98,7 +107,10 @@ def build_animation_pipe(
     adapters = []
     if use_style_lora:
         try:
-            if be.lora_weight_name:
+            if style_lora:                       # your trained world style
+                pipe.load_lora_weights(style_lora, adapter_name="pixel")
+                print(f"loaded style LoRA: {style_lora}")
+            elif be.lora_weight_name:
                 pipe.load_lora_weights(be.pixel_lora, weight_name=be.lora_weight_name,
                                        adapter_name="pixel")
             else:
@@ -129,11 +141,18 @@ def generate_candidates(
     base_seed: int = 0,
     use_lora: bool = True,
     backend=None,
+    trigger: str | None = None,
 ) -> list[Image.Image]:
     """n candidates for one animation frame, deterministically seeded."""
+    import os
+
     import torch
 
-    full_prompt = build_prompt(prompt, use_lora, backend=backend)
+    from ..generate import ENV_STYLE_TRIGGER
+
+    if trigger is None:
+        trigger = os.environ.get(ENV_STYLE_TRIGGER) or None
+    full_prompt = build_prompt(prompt, use_lora, backend=backend, trigger=trigger)
     out = []
     for j in range(n):
         gen = torch.Generator(device="cpu").manual_seed(base_seed + j)
