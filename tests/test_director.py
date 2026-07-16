@@ -76,6 +76,45 @@ def test_quadruped_next_steps_carry_body_flag(exec_env, tmp_path):
     assert "--body quadruped" in (tmp_path / "NEXT_STEPS.md").read_text()
 
 
+def test_heuristic_single_subject_hardening():
+    """Checkpoint A/B findings: forceful composition + isolation defaults."""
+    slime = heuristic_decider("a small slime monster")
+    assert "a single" in slime.enriched_prompt
+    assert "plain white background" in slime.enriched_prompt
+    assert "multiple creatures" in slime.negative_additions
+    assert slime.isolate is True
+
+    tile = heuristic_decider("grass texture")
+    assert tile.isolate is False
+    assert tile.negative_additions == ""
+
+
+def test_execute_isolates_subjects_but_not_tiles(monkeypatch, tmp_path):
+    import numpy as np
+
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module())
+
+    def subject_pipe(**kwargs):
+        arr = np.full((128, 128, 3), 250, dtype=np.uint8)   # plain background
+        arr[40:90, 40:90] = (60, 170, 80)                    # the subject
+        return types.SimpleNamespace(images=[Image.fromarray(arr, "RGB")])
+
+    pipe = MagicMock(side_effect=subject_pipe)
+
+    plan = Plan(workstream="simple_creature", enriched_prompt="a slime",
+                size=32, actions=[], isolate=True)
+    results = execute_plan(plan, tmp_path / "iso", pipe=pipe)
+    alpha = np.asarray(Image.open(results["sprite"]))[..., 3]
+    assert alpha[0, 0] == 0          # background stripped
+    assert (alpha == 255).any()      # subject kept
+
+    tile_plan = Plan(workstream="environment_tile", enriched_prompt="grass",
+                     size=32, isolate=False)
+    results = execute_plan(tile_plan, tmp_path / "tile", pipe=pipe)
+    alpha = np.asarray(Image.open(results["sprite"]))[..., 3]
+    assert (alpha == 255).all()      # tiles stay fully opaque
+
+
 def test_heuristic_sway_props():
     for prompt in ("a tree swaying in the wind", "an old oak tree",
                    "a tattered flag on a pole"):
@@ -120,7 +159,7 @@ def test_llm_decider_wiring():
         workstream="simple_creature",
         enriched_prompt="a slime, full body, centered",
         negative_additions="multiple creatures",
-        size=256, colors=16, actions=[], body="humanoid",
+        size=256, colors=16, actions=[], body="humanoid", isolate=True,
         reasoning="limbless blob",
     )
     client = MagicMock()

@@ -49,6 +49,12 @@ def _cmd_pixelize(a: argparse.Namespace) -> None:
     from PIL import Image
 
     src = Image.open(a.input)
+    if a.isolate:
+        from .isolate import isolate_subject
+
+        src, found = isolate_subject(src)
+        if not found:
+            print("isolate: no plain background found — keeping the full image")
     sprite = pixelize(src, size=a.size, colors=a.colors,
                       alpha_threshold=a.alpha_threshold, seed=a.seed,
                       palette=_load_palette(a))
@@ -74,6 +80,12 @@ def _cmd_generate(a: argparse.Namespace) -> None:
         raw.save(a.raw)
         print(f"wrote raw render {a.raw}")
 
+    if a.isolate:
+        from .isolate import isolate_subject
+
+        raw, found = isolate_subject(raw)
+        if not found:
+            print("isolate: no plain background found — keeping the full render")
     sprite = pixelize(raw, size=a.size, colors=a.colors, palette=_load_palette(a))
     _save_sprite(sprite, a.output, a.colors, a.preview)
 
@@ -264,6 +276,8 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_output_args(p_pix, default_output="pixel.png")
     p_pix.add_argument("--alpha-threshold", type=int, default=128)
     p_pix.add_argument("--seed", type=int, default=0)
+    p_pix.add_argument("--isolate", action="store_true",
+                       help="strip a plain background to transparency first")
     p_pix.set_defaults(func=_cmd_pixelize)
 
     p_gen = sub.add_parser("generate", help="generate a pixel-art sprite from a prompt")
@@ -282,6 +296,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_gen.add_argument("--raw", help="also save the pre-pixelized 512px render here")
     p_gen.add_argument("--tile", action="store_true",
                        help="seamless mode for environment tiles (wraps edge-to-edge)")
+    p_gen.add_argument("--isolate", action="store_true",
+                       help="strip a plain background to transparency (prompt for "
+                            "'isolated on a plain white background' too)")
     p_gen.set_defaults(func=_cmd_generate)
 
     p_pal = sub.add_parser("palette", help="create and inspect locked palettes")

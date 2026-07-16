@@ -10,8 +10,10 @@ git clone https://github.com/J-Glatter/surfside-code-sample && cd surfside-code-
 pip install -e ".[generate]"
 
 # 1. CUDA path + basic generation (first run downloads ~4 GB)
-spriteforge generate "a brave knight in green armour, full body" -o knight.png --seed 7 --preview 2
-#    -> confirm it reports no CPU warning, and speed feels right for a 3080
+#    Prompt for a plain white background and use --isolate so the sprite gets
+#    real transparency (field-tested: without this, sky/grass is baked in)
+spriteforge generate "a single brave knight in green armour, one figure, full body, centered, isolated on a plain white background" -o knight.png --seed 7 --preview 4 --isolate
+#    -> confirm it reports no CPU warning; check the sprite's corners are transparent
 
 # 2. Generate a few style references, then lock a world palette from the best
 spriteforge generate "a small slime monster" -o slime.png --seed 3

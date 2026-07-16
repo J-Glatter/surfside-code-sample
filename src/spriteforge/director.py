@@ -55,11 +55,18 @@ Workstreams:
 - environment_tile: ground/wall textures that must tile seamlessly
   (grass, cobblestone, water, sand).
 
-enriched_prompt: rewrite the request for SD 1.5 — subject first, add
-composition hints ("full body, centered, plain background" for characters and
-creatures; "top-down view, flat texture" for tiles). Do not add style words
-like "pixel art" — a style LoRA handles that.
-negative_additions: extra negative-prompt terms this asset needs, or "".
+enriched_prompt: rewrite the request for SD 1.5 — subject first, and be
+FORCEFUL about single-subject composition: characters/creatures/props get
+"a single <subject>, one creature only, full body, centered, isolated on a
+plain white background"; tiles get "top-down view, flat texture, no objects".
+Weak hints produce collages of many creatures (field-tested). Do not add
+style words like "pixel art" — a style LoRA handles that.
+negative_additions: extra negative-prompt terms this asset needs. For
+characters/creatures/props always include "multiple creatures, crowd,
+collage, pattern, border, frame, busy background, scenery" plus anything
+asset-specific; "" only for tiles.
+isolate: true to strip the plain background to transparency after
+generation (characters/creatures/props); false for tiles.
 size: sprite longest side in px — 64 for everything (characters, creatures,
 props, tiles all share the game's 64px logical grid; engines upscale for
 display) unless the request implies tiny or huge.
@@ -76,6 +83,7 @@ class Plan:
     colors: int = 16
     actions: list[str] = field(default_factory=list)
     body: str = "humanoid"     # rig for limbed_character: humanoid | quadruped
+    isolate: bool = True       # strip plain background to transparency (not tiles)
     reasoning: str = ""
     source: str = "heuristic"  # which decider produced this plan
 
@@ -118,6 +126,8 @@ _QUADRUPED_WORDS = {"wolf", "dog", "hound", "cat", "horse", "pony", "deer",
 _SWAY_WORDS = {"tree", "flag", "banner", "plant", "flower", "bush", "sapling",
                "palm", "reed", "vine", "lantern", "sign", "sway", "swaying",
                "wind", "waving", "fluttering"}
+_SUBJECT_NEGATIVE = ("multiple creatures, crowd, collage, pattern, border, "
+                     "frame, busy background, scenery")
 
 
 def heuristic_decider(prompt: str) -> Plan:
@@ -126,22 +136,30 @@ def heuristic_decider(prompt: str) -> Plan:
 
     body = "humanoid"
     size = 64                  # one logical grid for everything (PLAN.md §6)
+    # forceful single-subject composition — weak hints produce collages
+    # (Checkpoint A/B finding), and the white background feeds isolation
+    subject_suffix = ("one creature only, full body, centered, "
+                      "isolated on a plain white background")
+    negative = _SUBJECT_NEGATIVE
+    isolate = True
     if words & _TILE_WORDS:
         workstream = "environment_tile"
-        enriched = f"{prompt}, top-down view, flat texture"
+        enriched = f"{prompt}, top-down view, flat texture, no objects"
+        negative, isolate = "", False
     elif words & _BLOB_WORDS:
         workstream = "simple_creature"
-        enriched = f"{prompt}, full body, centered, plain background"
+        enriched = f"a single {prompt}, {subject_suffix}"
     elif words & _QUADRUPED_WORDS:
         workstream = "limbed_character"
         body = "quadruped"
-        enriched = f"{prompt}, full body, side view, centered, plain background"
+        enriched = f"a single {prompt}, side view, {subject_suffix}"
     elif words & _LIMBED_WORDS:
         workstream = "limbed_character"
-        enriched = f"{prompt}, full body, centered, plain background"
+        enriched = f"a single {prompt}, {subject_suffix}"
     else:
         workstream = "static_prop"
-        enriched = f"{prompt}, centered, plain background"
+        enriched = (f"a single {prompt}, centered, "
+                    f"isolated on a plain white background")
 
     if body == "quadruped":
         actions = list(_QUADRUPED_ACTIONS)
@@ -153,9 +171,11 @@ def heuristic_decider(prompt: str) -> Plan:
     return Plan(
         workstream=workstream,
         enriched_prompt=enriched,
+        negative_additions=negative,
         size=size,
         actions=actions,
         body=body,
+        isolate=isolate,
         reasoning="keyword heuristic",
         source="heuristic",
     )
@@ -178,6 +198,7 @@ def llm_decider(prompt: str, model: str = DIRECTOR_MODEL, client=None) -> Plan:
         colors: int = 16
         actions: list[str] = Field(default_factory=list)
         body: Literal["humanoid", "quadruped"] = "humanoid"
+        isolate: bool = True
         reasoning: str = ""
 
     client = client or anthropic.Anthropic()
@@ -200,6 +221,7 @@ def llm_decider(prompt: str, model: str = DIRECTOR_MODEL, client=None) -> Plan:
         colors=p.colors,
         actions=list(actions),
         body=p.body,
+        isolate=p.isolate,
         reasoning=p.reasoning,
         source=f"llm:{model}",
     )
@@ -290,12 +312,23 @@ def execute_plan(
                        seam_error=seam_error(raw))
         return results
 
+    def _isolated(raw):
+        if not plan.isolate:
+            return raw
+        from .isolate import isolate_subject
+
+        subject, found = isolate_subject(raw)
+        if not found:
+            print("director: no plain background found — keeping the full render")
+        return subject
+
     if plan.workstream == "limbed_character":
         heroes = []
         for i in range(HERO_CANDIDATES):
             raw = _generate(seed_offset=i)
             path = out_dir / f"hero_{i:02d}.png"
-            pixelize(raw, size=plan.size, colors=plan.colors, palette=palette).save(path)
+            pixelize(_isolated(raw), size=plan.size, colors=plan.colors,
+                     palette=palette).save(path)
             raw.save(out_dir / f"hero_{i:02d}_raw.png")  # refine wants the raw render
             heroes.append(path)
         body_flag = " --body quadruped" if plan.body == "quadruped" else ""
@@ -309,7 +342,8 @@ def execute_plan(
     # static_prop and simple_creature share the single-sprite start; both may
     # carry procedural actions (a slime bounces, a tree sways, a chest is still)
     raw = _generate()
-    sprite = pixelize(raw, size=plan.size, colors=plan.colors, palette=palette)
+    sprite = pixelize(_isolated(raw), size=plan.size, colors=plan.colors,
+                      palette=palette)
     sprite_path = out_dir / "sprite.png"
     sprite.save(sprite_path)
     results["sprite"] = sprite_path
