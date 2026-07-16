@@ -67,6 +67,13 @@ def main() -> None:
     ap.add_argument("--palette", default=None, help="lock to a world palette")
     ap.add_argument("--offline", action="store_true",
                     help="skip the LLM director (keyword routing only)")
+    ap.add_argument("--require-llm", action="store_true",
+                    help="abort before generating if the LLM director is "
+                         "unreachable (a bad ANTHROPIC_API_KEY otherwise wastes "
+                         "the whole run on weaker keyword prompts)")
+    ap.add_argument("--only", default=None, metavar="SLUGS",
+                    help="comma-separated subject slugs to (re)generate, e.g. "
+                         "'wizard,goblin' — default is all")
     ap.add_argument("--sd15", action="store_true")
     ap.add_argument("--style-lora", default=None,
                     help="seed from an existing style LoRA (rare)")
@@ -80,6 +87,25 @@ def main() -> None:
 
         palette = Palette.load(args.palette)
 
+    prompts = PROMPTS
+    if args.only:
+        wanted = {s.strip() for s in args.only.split(",")}
+        prompts = [(s, p) for s, p in PROMPTS if s in wanted]
+        missing = wanted - {s for s, _ in PROMPTS}
+        if missing:
+            raise SystemExit(f"--only: unknown slug(s) {sorted(missing)}; "
+                             f"choose from {[s for s, _ in PROMPTS]}")
+
+    # Fail fast on a bad key BEFORE burning GPU on weaker heuristic prompts.
+    if args.require_llm and not args.offline:
+        probe = plan_asset(prompts[0][1], offline=False)
+        if not probe.source.startswith("llm"):
+            raise SystemExit(
+                "--require-llm: the LLM director is unreachable (see the error "
+                "above — usually a bad or unset ANTHROPIC_API_KEY). Fix the key "
+                "and retry, or drop --require-llm to run on keyword prompts.")
+        print(f"LLM director OK ({probe.source}).")
+
     out = Path(args.output)
     review = out / "_review"
     review.mkdir(parents=True, exist_ok=True)
@@ -89,9 +115,11 @@ def main() -> None:
     pipe = build_pipe(backend=backend, style_lora=args.style_lora)
 
     collected: list[Path] = []
-    for slug, prompt in PROMPTS:
+    sources: dict[str, int] = {}
+    for slug, prompt in prompts:
         print(f"\n== {slug}: {prompt} ==")
         plan = plan_asset(prompt, offline=args.offline)
+        sources[plan.source] = sources.get(plan.source, 0) + 1
         plan.actions = []          # stills only — skip procedural animation here
         execute_plan(
             plan, out / slug, pipe=pipe, palette=palette,
@@ -120,6 +148,7 @@ def main() -> None:
             review / "contact_sheet.png")
 
     print(f"\n{len(collected)} candidates in {review}")
+    print(f"planning sources: {sources}")   # spot a silent heuristic fallback
     print("open contact_sheet.png, then copy the ~20 cleanest into style_refs/:")
     print("  spriteforge dataset prep style_refs/*.png -o style_ds "
           "--trigger myworld_style --name myworld-style")
