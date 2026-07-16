@@ -154,6 +154,29 @@ def test_build_prompt_custom_trigger():
     assert build_prompt("a slime", trigger="") == "a slime"        # suppressed
 
 
+def test_env_style_lora_is_default(monkeypatch):
+    monkeypatch.setenv("SPRITEFORGE_STYLE_LORA", "/w/env.safetensors")
+    _, _sd, sdxl = _built_pipe(monkeypatch, cuda=True)   # no explicit style_lora
+    sdxl.load_lora_weights.assert_called_once_with("/w/env.safetensors")
+
+
+def test_explicit_style_lora_beats_env(monkeypatch):
+    monkeypatch.setenv("SPRITEFORGE_STYLE_LORA", "/w/env.safetensors")
+    _, _sd, sdxl = _built_pipe(monkeypatch, cuda=True,
+                               style_lora="/w/explicit.safetensors")
+    sdxl.load_lora_weights.assert_called_once_with("/w/explicit.safetensors")
+
+
+def test_env_style_trigger_leads_prompt(monkeypatch):
+    from spriteforge import generate as g
+
+    monkeypatch.setenv("SPRITEFORGE_STYLE_TRIGGER", "myworld_style")
+    monkeypatch.setitem(sys.modules, "torch", _fake_torch(cuda=True))
+    pipe = MagicMock(name="pipe")
+    g.generate(pipe, "a fox")
+    assert pipe.call_args.kwargs["prompt"].startswith("myworld_style, a fox")
+
+
 def test_build_pipe_survives_lora_failure(monkeypatch):
     from spriteforge import generate as g
 

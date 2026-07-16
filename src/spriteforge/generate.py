@@ -16,7 +16,14 @@ runs without the `[generate]` extra. First real run downloads the model (SDXL
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+
+# Set these once (e.g. `export SPRITEFORGE_STYLE_LORA=.../myworld-style.safetensors`)
+# and every entry point — make, generate, the worker — uses your trained style
+# LoRA by default, no per-command flag. An explicit --style-lora still wins.
+ENV_STYLE_LORA = "SPRITEFORGE_STYLE_LORA"
+ENV_STYLE_TRIGGER = "SPRITEFORGE_STYLE_TRIGGER"
 
 
 @dataclass(frozen=True)
@@ -157,6 +164,8 @@ def build_pipe(fp16: bool | None = None, use_lora: bool = True,
     from diffusers import DPMSolverMultistepScheduler
 
     be = get_backend(backend)
+    if style_lora is None:                      # default from the env, if set
+        style_lora = os.environ.get(ENV_STYLE_LORA) or None
     device = device or pick_device()
     if device == "cpu":
         print("WARNING: no GPU available — falling back to CPU (very slow).")
@@ -213,6 +222,8 @@ def generate(
     import torch
 
     be = get_backend(backend)
+    if trigger is None:                         # default from the env, if set
+        trigger = os.environ.get(ENV_STYLE_TRIGGER) or None
     full_prompt = build_prompt(prompt, use_lora, backend=be, trigger=trigger)
     dim = size or be.size
     generator = None
