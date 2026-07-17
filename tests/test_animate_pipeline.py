@@ -152,6 +152,20 @@ def test_build_animation_pipe_custom_style_lora(monkeypatch):
     assert calls["pixel"] == ("/w/myworld.safetensors",)
 
 
+def test_build_animation_pipe_style_weight(monkeypatch):
+    from spriteforge.animate import frames as frames_mod
+
+    pipe = MagicMock(name="pipe")
+    pipe.to.return_value = pipe
+    fake_diff = _fake_controlnet_diffusers(pipe)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch_module(cuda=True))
+    monkeypatch.setitem(sys.modules, "diffusers", fake_diff)
+
+    frames_mod.build_animation_pipe(style_lora="/w/s.safetensors", style_weight=0.6)
+    # the style LoRA is scaled down so the pose ControlNet can win
+    pipe.set_adapters.assert_called_once_with(["pixel"], [0.6])
+
+
 def test_controlnet_for_quadruped_needs_sd15():
     import pytest
 

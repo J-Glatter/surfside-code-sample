@@ -54,6 +54,7 @@ def animate_action(
     body: str = "humanoid",
     backend=None,
     trigger: str | None = None,
+    isolate: bool = True,
 ) -> tuple[list[Image.Image], Selection]:
     """Generate one animated action. Returns (locked pixelized frames, selection).
 
@@ -82,6 +83,10 @@ def animate_action(
             d.mkdir(parents=True, exist_ok=True)
             for j, raw in enumerate(raws):
                 raw.save(d / f"{j:03d}.png")
+        if isolate:                          # strip the background SD paints in
+            from ..isolate import isolate_subject
+
+            raws = [isolate_subject(r)[0] for r in raws]
         candidates_px.append([
             np.asarray(pixelize(raw, size=size, colors=colors, palette=palette))
             for raw in raws

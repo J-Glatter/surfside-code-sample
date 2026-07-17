@@ -192,16 +192,19 @@ def _cmd_animate(a: argparse.Namespace) -> None:
     controlnet = a.controlnet or controlnet_for(a.body, be)
     pipe = build_animation_pipe(character_lora=a.character_lora, fp16=fp16,
                                 controlnet_model=controlnet, backend=be, body=a.body,
-                                style_lora=a.style_lora)
+                                style_lora=a.style_lora, style_weight=a.style_weight)
     out = Path(a.output)
     out.mkdir(parents=True, exist_ok=True)
     print(f"animating {a.body} {a.action}: {a.frames or 'default'} frames x "
-          f"{a.candidates} candidates (controlnet: {controlnet})...")
+          f"{a.candidates} candidates (controlnet: {controlnet}, "
+          f"scale={a.controlnet_scale}, style_weight={a.style_weight})...")
     locked, selection = animate_action(
         pipe, a.action, a.prompt,
         size=a.size, colors=a.colors, palette=_load_palette(a),
         frames=a.frames, n_candidates=a.candidates, seed=a.seed,
+        controlnet_scale=a.controlnet_scale,
         raw_dir=a.raw_dir, body=a.body, backend=be, trigger=a.style_trigger,
+        isolate=not a.no_isolate,
     )
     for k, frame in enumerate(locked):
         frame.save(out / f"{a.action}_{k:02d}.png")
@@ -451,6 +454,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_anim.add_argument("--style-lora", default=None, metavar="PATH_OR_ID",
                         help="trained style LoRA for the frames (Checkpoint C)")
     p_anim.add_argument("--style-trigger", default=None, metavar="TOKEN")
+    p_anim.add_argument("--style-weight", type=float, default=0.7,
+                        help="style LoRA strength; <1 lets the pose ControlNet "
+                             "win over a standing-pose-biased style LoRA")
+    p_anim.add_argument("--controlnet-scale", type=float, default=1.0,
+                        help="pose conditioning strength; raise (1.2-1.5) if "
+                             "frames ignore the skeleton")
+    p_anim.add_argument("--no-isolate", action="store_true",
+                        help="keep the generated background instead of stripping it")
     p_anim.set_defaults(func=_cmd_animate)
 
     p_sheet = sub.add_parser("sheet", help="pack frame dirs into a sprite sheet")

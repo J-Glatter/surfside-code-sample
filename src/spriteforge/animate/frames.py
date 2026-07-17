@@ -58,12 +58,16 @@ def build_animation_pipe(
     backend=None,
     body: str = "humanoid",
     style_lora: str | None = None,
+    style_weight: float = 1.0,
 ):
     """Base model + a pose ControlNet, with style/character LoRAs stacked.
 
     `controlnet_model` overrides the backend/body default when given.
     `style_lora` (or $SPRITEFORGE_STYLE_LORA) replaces the stock pixel LoRA, so
     animated frames match a world trained at Checkpoint C.
+    `style_weight` < 1 weakens the style LoRA so it doesn't override the pose
+    ControlNet — a style LoRA trained on standing sprites will otherwise drag
+    every frame back to a standing pose (field bug at Checkpoint D).
     """
     import os
 
@@ -124,8 +128,9 @@ def build_animation_pipe(
             adapters.append("character")
         except Exception as e:  # noqa: BLE001
             print(f"couldn't load character LoRA ({e}). Continuing without it.")
-    if len(adapters) > 1:
-        pipe.set_adapters(adapters, [1.0] * len(adapters))
+    if adapters:
+        weights = [style_weight if a == "pixel" else 1.0 for a in adapters]
+        pipe.set_adapters(adapters, weights)
     return pipe
 
 
